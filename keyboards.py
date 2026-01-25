@@ -28,6 +28,7 @@ CB_EVENT_BACK = "event:back:"
 CB_EVENT_INVITE = "event:invite:"
 CB_EVENT_MY = "event:my:"
 CB_EVENT_PARTICIPANTS = "event:participants:"
+CB_BOOKING_CANCEL = "booking:cancel:"
 CB_PROFILE_MY_BOOKINGS = "profile:my_bookings"
 CB_PROFILE_MY_EVENTS = "profile:my_events"
 CB_NAV_BACK_TO_MAIN = "nav:back_to_main"
@@ -210,6 +211,10 @@ def get_my_bookings_kb(bookings):
             InlineKeyboardButton(
                 text=text,
                 callback_data=f"{CB_EVENT_VIEW}{event_id}"
+            ),
+            InlineKeyboardButton(
+                text="❌ Отмена",
+                callback_data=f"{CB_BOOKING_CANCEL}{event_id}"
             )
         ])
     

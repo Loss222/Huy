@@ -38,6 +38,53 @@ db = Database()
 admin_router = register_admin(db, bot, ADMIN_IDS, PLATFORM_FEE)
 onboarding_router = register_onboarding(db, ADMIN_IDS)
 
+# ОБРАБОТЧИК ОТМЕНЫ БРОНИРОВАНИЯ
+@router.callback_query(F.data.startswith(CB_BOOKING_CANCEL))
+async def cancel_booking(callback: CallbackQuery, state: FSMContext):
+    """Обработчик отмены бронирования"""
+    try:
+        event_id = int(callback.data.split(CB_BOOKING_CANCEL, 1)[1])
+        
+        # Получаем информацию о событии
+        event = await db.get_event_details(event_id)
+        
+        if not event:
+            await callback.answer(BOOKING_NOT_FOUND)
+            return
+        
+        event_type, custom_type, city, date, time, *_ = event
+        display_type = custom_type or event_type
+        date_time = f"{date} {time}"
+        
+        # Отменяем бронирование
+        success = await db.cancel_booking(callback.from_user.id, event_id)
+        
+        if success:
+            # Показываем сообщение об успешной отмене
+            await callback.message.edit_text(
+                BOOKING_CANCEL_SUCCESS.format(
+                    event_type=display_type,
+                    city=city,
+                    date_time=date_time
+                ),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ К бронированиям", callback_data=CB_PROFILE_MY_BOOKINGS)],
+                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_NAV_BACK_TO_MAIN)]
+                ])
+            )
+            await callback.answer("✅ Бронирование отменено", show_alert=False)
+            logging.info(f"Booking cancelled: user {callback.from_user.id}, event {event_id}")
+        else:
+            await callback.answer(BOOKING_NOT_FOUND, show_alert=True)
+            
+    except ValueError:
+        logging.error(f"Invalid event_id format in CB_BOOKING_CANCEL: {callback.data}")
+        await callback.answer(BOOKING_CANCEL_ERROR, show_alert=True)
+    except Exception as e:
+        logging.error(f"Error cancelling booking: {e}")
+        await callback.answer(BOOKING_CANCEL_ERROR, show_alert=True)
+
 # FALLBACK ROUTER - обработка неопознанных сообщений
 fallback_router = Router()
 
@@ -1238,6 +1285,76 @@ async def back_to_my_bookings(callback: CallbackQuery, state: FSMContext):
         reply_markup=get_my_bookings_kb(bookings[:10])
     )
     await callback.answer()
+
+@router.callback_query(F.data.startswith(CB_BOOKING_CANCEL))
+async def cancel_booking(callback: CallbackQuery, state: FSMContext):
+    """Обработчик отмены бронирования"""
+    try:
+        event_id = int(callback.data.split(CB_BOOKING_CANCEL, 1)[1])
+        
+        # Получаем информацию о событии
+        event = await db.get_event_details(event_id)
+        
+        if not event:
+            await callback.message.edit_text(
+                BOOKING_NOT_FOUND,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]
+                ])
+            )
+            await callback.answer(BOOKING_NOT_FOUND, show_alert=True)
+            return
+        
+        # Пытаемся отменить бронирование
+        success = await db.cancel_booking(callback.from_user.id, event_id)
+        
+        if success:
+            (event_type, custom_type, city, date, time, max_participants, 
+             description, contact, status, creator_id, creator_username, 
+             creator_name, confirmed_count) = event
+            
+            display_type = custom_type or event_type
+            date_time = f"{date} {time}"
+            
+            # Показываем сообщение об успехе
+            await callback.message.edit_text(
+                BOOKING_CANCEL_SUCCESS.format(
+                    event_type=display_type,
+                    city=city,
+                    date_time=date_time
+                ),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📋 Мои бронирования", callback_data=CB_PROFILE_MY_BOOKINGS)],
+                    [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]
+                ])
+            )
+            
+            logging.info(f"User {callback.from_user.id} cancelled booking for event {event_id}")
+            await callback.answer("✅ Бронирование отменено!", show_alert=False)
+        else:
+            await callback.message.edit_text(
+                BOOKING_NOT_FOUND,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📋 Мои бронирования", callback_data=CB_PROFILE_MY_BOOKINGS)],
+                    [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]
+                ])
+            )
+            await callback.answer(BOOKING_NOT_FOUND, show_alert=True)
+    
+    except Exception as e:
+        logging.error(f"Error cancelling booking: {e}", exc_info=True)
+        await callback.message.edit_text(
+            BOOKING_CANCEL_ERROR,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📋 Мои бронирования", callback_data=CB_PROFILE_MY_BOOKINGS)],
+                [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]
+            ])
+        )
+        await callback.answer(BOOKING_CANCEL_ERROR, show_alert=True)
 
 @fallback_router.callback_query()
 async def callback_fallback(callback: CallbackQuery, state: FSMContext):

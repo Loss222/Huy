@@ -1,5 +1,6 @@
 # database.py
 import aiosqlite
+import logging
 from typing import Optional, List, Tuple, Dict, Any
 
 class Database:
@@ -469,3 +470,42 @@ class Database:
                 WHERE ep.id = ?
             """, (booking_id,))
             return await cursor.fetchone()
+    async def cancel_booking(self, user_telegram_id: int, event_id: int) -> bool:
+        """
+        Отмена бронирования пользователем
+        
+        Args:
+            user_telegram_id: Telegram ID пользователя
+            event_id: ID события
+            
+        Returns:
+            True если бронирование успешно отменено, False если ошибка
+        """
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                user_id = await self.get_user_id(user_telegram_id)
+                
+                if not user_id:
+                    return False
+                
+                # Проверяем, существует ли бронирование
+                cursor = await db.execute("""
+                    SELECT id FROM event_participants 
+                    WHERE event_id = ? AND user_id = ? AND status = 'CONFIRMED'
+                """, (event_id, user_id))
+                
+                booking = await cursor.fetchone()
+                if not booking:
+                    return False
+                
+                # Удаляем бронирование
+                await db.execute("""
+                    DELETE FROM event_participants 
+                    WHERE event_id = ? AND user_id = ?
+                """, (event_id, user_id))
+                
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error cancelling booking for user {user_telegram_id}, event {event_id}: {e}")
+            return False
