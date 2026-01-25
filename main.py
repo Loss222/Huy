@@ -102,29 +102,29 @@ async def handle_full_event(event_id: int):
         if creator_telegram_id:
             await bot.send_message(
                 creator_telegram_id,
-                f"""🎊 ВАУ! СОБЫТИЕ ПОЛНОСТЬЮ ЗАПОЛНЕНО!
+                f"""🎊 <b>ВАУ! СОБЫТИЕ ПОЛНОСТЬЮ ЗАПОЛНЕНО!</b>
 
-🎯 {custom_type or event_type}
-📅 {date} в {time}
-👥 {confirmed_count}/{max_participants} участников
+🎯 <b>{custom_type or event_type}</b>
+📅 <b>{date} в {time}</b>
+👥 <b>{confirmed_count}/{max_participants} участников</b>
 
-🔥 Что дальше?
+🔥 <b>Что дальше?</b>
 
-1️⃣ Создай групповой чат
+1️⃣ <b>Создай групповой чат</b>
    • Добавь всех участников
    • Назови чат по типу события
 
-2️⃣ Координируй
+2️⃣ <b>Координируй</b>
    • Уточни детали встречи
    • Ответь на вопросы
    • Поддерживай настроение!
 
-3️⃣ Наслаждайся
+3️⃣ <b>Наслаждайся</b>
    • Все оплатили участие
    • Люди ждут твоего события
    • Сделай это незабываемым!
 
-💡 Совет: Начни диалог с приветствия и краткого плана!"""
+💡 <b>Совет:</b> Начни диалог с приветствия и краткого плана!"""
             )
         
         # 2. Уведомление всем участникам
@@ -134,25 +134,25 @@ async def handle_full_event(event_id: int):
                 try:
                     await bot.send_message(
                         telegram_id,
-                        f"""🎉 ОТЛИЧНЫЕ НОВОСТИ!
+                        f"""🎉 <b>ОТЛИЧНЫЕ НОВОСТИ!</b>
 
-Событие "{custom_type or event_type}" набрало полный состав!
+Событие <b>"{custom_type or event_type}"</b> набрало полный состав!
 
-👥 Всего участников: {confirmed_count}
-📅 Дата: {date}
-⏰ Время: {time}
-📍 Место: {city}
+👥 <b>Всего участников:</b> {confirmed_count}
+📅 <b>Дата:</b> {date}
+⏰ <b>Время:</b> {time}
+📍 <b>Место:</b> {city}
 
-🔥 Что дальше?
+🔥 <b>Что дальше?</b>
 
 1. Организатор скоро создаст чат
 2. Ждите приглашения в течение 24 часов
 3. Подготовьтесь к встрече!
 
-🎯 Если организатор не связался с вами до {date}, 
-напишите ему напрямую: {contact}
+🎯 <i>Если организатор не связался с вами до {date}, 
+напишите ему напрямую: {contact}</i>
 
-💫 Желаем отличного времяпровождения!"""
+💫 <b>Желаем отличного времяпровождения!</b>"""
                     )
                 except Exception as e:
                     logging.error(f"Failed to notify participant {telegram_id}: {e}")
@@ -164,12 +164,6 @@ async def handle_full_event(event_id: int):
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
-    # Если пользователь в процессе создания события — игнорируем /start
-    current_state = await state.get_state()
-    if current_state and "CreateEventStates" in str(current_state):
-        await message.answer("Ты создаёшь событие. Закончи процесс или нажми «Отмена».")
-        return
-
     args = message.text.split()
     
     if len(args) > 1 and args[1].startswith("invite_"):
@@ -435,14 +429,14 @@ async def process_event_type_other(message: Message, state: FSMContext):
         
         if len(custom_type) < 3:
             await message.answer(
-                "❌ Название слишком короткое!\n\nМинимум 3 символа. Примеры:\n• Танцы\n• Волейбол\n• Пикник\n\nВведите снова:",
+                "❌ <b>Название слишком короткое!</b>\n\nМинимум 3 символа. Примеры:\n• Танцы\n• Волейбол\n• Пикник\n\nВведите снова:",
                 reply_markup=get_back_cancel_kb()
             )
             return
         
         if len(custom_type) > 50:
             await message.answer(
-                "❌ Название слишком длинное!\n\nМаксимум 50 символов. Введите короче.",
+                "❌ <b>Название слишком длинное!</b>\n\nМаксимум 50 символов. Введите короче.",
                 reply_markup=get_back_cancel_kb()
             )
             return
@@ -460,6 +454,7 @@ async def process_event_type_other(message: Message, state: FSMContext):
             "❌ Ошибка при обработке. Попробуйте снова.",
             reply_markup=get_back_cancel_kb()
         )
+
 
 @router.message(CreateEventStates.DATE)
 async def process_event_date(message: Message, state: FSMContext):
@@ -543,19 +538,19 @@ async def process_max_participants(message: Message, state: FSMContext):
         max_participants = int(message.text)
         if max_participants < 2:
             await message.answer(
-                "❌ Минимум 2 участника!\n\nВведите число больше или равное 2. Например: 10",
+                "❌ <b>Минимум 2 участника!</b>\n\nВведите число больше или равное 2. Например: 10",
                 reply_markup=get_back_cancel_kb()
             )
             return
         if max_participants > 1000:
             await message.answer(
-                "❌ Слишком много!\n\nМаксимум 1000 участников. Введите меньше.",
+                "❌ <b>Слишком много!</b>\n\nМаксимум 1000 участников. Введите меньше.",
                 reply_markup=get_back_cancel_kb()
             )
             return
     except ValueError:
         await message.answer(
-            "❌ Это не число!\n\nВведите просто цифры, например: 10",
+            "❌ <b>Это не число!</b>\n\nВведите просто цифры, например: <code>10</code>",
             reply_markup=get_back_cancel_kb()
         )
         return
@@ -588,7 +583,7 @@ async def process_description(message: Message, state: FSMContext):
     
     if len(description) > 500:
         await message.answer(
-            "❌ Описание слишком длинное!\n\nМаксимум 500 символов. Сократите текст.",
+            "❌ <b>Описание слишком длинное!</b>\n\nМаксимум 500 символов. Сократите текст.",
             reply_markup=get_back_cancel_kb()
         )
         return
@@ -622,7 +617,7 @@ async def process_contact(message: Message, state: FSMContext):
         
         if len(contact) > 100:
             await message.answer(
-                "❌ Контакт слишком длинный!\n\nМаксимум 100 символов. Введите короче.",
+                "❌ <b>Контакт слишком длинный!</b>\n\nМаксимум 100 символов. Введите короче.",
                 reply_markup=get_back_cancel_kb()
             )
             return
@@ -669,10 +664,10 @@ async def process_confirmation(message: Message, state: FSMContext):
             
             if not event_id:
                 await message.answer(
-                    "❌ Ошибка при создании события\n\nПопробуйте снова позже.",
-                    reply_markup=get_confirm_kb()
+                    "❌ <b>Ошибка при создании события</b>\n\nПопробуйте снова позже.",
+                    reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
                 )
-                # Не очищаем FSM — оставляем пользователя в состоянии подтверждения
+                await state.clear()
                 return
             
             invite_link = f"https://t.me/{bot._me.username}?start=invite_{event_id}_{message.from_user.id}"
@@ -689,7 +684,7 @@ async def process_confirmation(message: Message, state: FSMContext):
                 contact=data['contact']
             )
             
-            # Переходим в главное меню (без полного clear())
+            await state.clear()
             await state.set_state(MainStates.MAIN_MENU)
             await message.answer(text, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS))
             
@@ -701,17 +696,17 @@ async def process_confirmation(message: Message, state: FSMContext):
         except Exception as e:
             logging.error(f"Error creating event: {e}", exc_info=True)
             await message.answer(
-                "❌ Произошла ошибка при создании события\n\nПопробуйте снова позже или напишите в поддержку.",
-                reply_markup=get_confirm_kb()
+                "❌ <b>Произошла ошибка при создании события</b>\n\nПопробуйте снова позже или напишите в поддержку.",
+                reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
             )
-            # Не очищаем FSM — оставляем пользователя в состоянии подтверждения
+            await state.clear()
         
     elif message.text == BTN_EDIT:
         await state.set_state(CreateEventStates.TYPE)
         await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb())
     else:
         await message.answer(
-            "❌ Пожалуйста, выберите вариант:",
+            "❌ <b>Пожалуйста, выберите вариант:</b>",
             reply_markup=get_confirm_kb()
         )
 
@@ -979,7 +974,7 @@ async def show_my_bookings(callback: CallbackQuery, state: FSMContext):
         formatted_date = booking_dt.strftime("%d.%m.%Y")
         
         bookings_text += (
-            f"{i}. {event_type}\n"
+            f"{i}. <b>{event_type}</b>\n"
             f"   🏙 {city} | 📅 {date_time}\n"
             f"   🕐 Забронировано: {formatted_date}\n\n"
         )
@@ -1021,7 +1016,7 @@ async def show_my_events(callback: CallbackQuery, state: FSMContext):
             status_text = "❌ Неактивно"
         
         events_text += (
-            f"{event_type}\n"
+            f"<b>{event_type}</b>\n"
             f"🏙 {city} | 📅 {date_time}\n"
             f"👥 {participants_count}/{max_participants} участников\n"
             f"{status_text}\n\n"
@@ -1054,7 +1049,7 @@ async def show_my_event_details(callback: CallbackQuery, state: FSMContext):
     
     participants = await db.get_event_participants_list(event_id)
     
-    bottom_text = f"Уже забронировали: {len(participants)} участник(ов)\n" if participants else ""
+    bottom_text = f"<b>Уже забронировали:</b> {len(participants)} участник(ов)\n" if participants else ""
     
     text = EVENT_MANAGEMENT_DETAILS.format(
         event_type=display_type,
@@ -1101,7 +1096,7 @@ async def show_event_participants(callback: CallbackQuery, state: FSMContext):
         
         participants_text += f"{i}. {display_name}\n   🆔 {telegram_id} | 📅 {join_date}\n"
     
-    participants_text += f"\nВсего: {len(participants)} участник(ов)"
+    participants_text += f"\n<b>Всего:</b> {len(participants)} участник(ов)"
     
     await state.set_state(ProfileStates.MY_EVENTS)
     await callback.message.edit_text(
@@ -1224,7 +1219,7 @@ async def back_to_my_events(callback: CallbackQuery, state: FSMContext):
             active_count += 1
         
         events_text += (
-            f"{event_type}\n"
+            f"<b>{event_type}</b>\n"
             f"🏙 {city} | 📅 {date_time}\n"
             f"👥 {participants_count}/{max_participants} участников\n"
             f"{'✅ Активно' if status == 'ACTIVE' else '❌ Неактивно'}\n\n"
@@ -1261,7 +1256,7 @@ async def back_to_my_bookings(callback: CallbackQuery, state: FSMContext):
         formatted_date = booking_dt.strftime("%d.%m.%Y")
         
         bookings_text += (
-            f"{i}. {event_type}\n"
+            f"{i}. <b>{event_type}</b>\n"
             f"   🏙 {city} | 📅 {date_time}\n"
             f"   🕐 Забронировано: {formatted_date}\n\n"
         )

@@ -74,7 +74,7 @@ def register_onboarding(db: Database, admin_ids: list):
         name = data.get('name')
         if not name:
             # Некорректные данные сессии — спросим имя заново
-            # Не очищаем FSM полностью — просто переводим в шаг ввода имени
+            await state.clear()
             await state.set_state(OnboardingStates.NAME)
             await callback.message.answer(WELCOME_ONBOARDING, reply_markup=ReplyKeyboardRemove())
             await callback.answer()
