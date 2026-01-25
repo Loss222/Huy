@@ -11,6 +11,7 @@ class MainStates(StatesGroup):
 
 # === СОСТОЯНИЯ СОЗДАНИЯ СОБЫТИЯ ===
 class CreateEventStates(StatesGroup):
+    step_1 = State()
     TYPE = State()
     TYPE_OTHER = State()
     DATE = State()

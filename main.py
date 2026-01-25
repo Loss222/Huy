@@ -313,12 +313,13 @@ async def go_back(message: Message, state: FSMContext):
         await message.answer(BACK_TO_MAIN, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS))
     
     elif current_state == CreateEventStates.TYPE_OTHER:
-        await state.set_state(CreateEventStates.TYPE)
-        await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb())
+        # Возврат к началу создания события — показываем единый экран step_1
+        await state.set_state(CreateEventStates.step_1)
+        await send_create_intro(message, state)
     
     elif current_state == CreateEventStates.DATE:
-        await state.set_state(CreateEventStates.TYPE)
-        await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb())
+        await state.set_state(CreateEventStates.step_1)
+        await send_create_intro(message, state)
     
     elif current_state == CreateEventStates.TIME:
         await state.set_state(CreateEventStates.DATE)
@@ -381,9 +382,18 @@ async def start_create_event(message: Message, state: FSMContext):
         return
     
     await state.update_data(city=city)
-    await state.set_state(CreateEventStates.TYPE)
-    
+    # Переводим пользователя в шаг 1 создания события.
+    await state.set_state(CreateEventStates.step_1)
+    # Большой вводный текст отправляется только в обработчике CreateEventStates.step_1
+    await send_create_intro(message, state)
+
+
+async def send_create_intro(message: Message, state: FSMContext):
+    """Отправляет единый расширенный экран начала создания события
+    и переводит сессию в состояние выбора типа (TYPE)."""
     await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb())
+    # Готовы принять выбор типа
+    await state.set_state(CreateEventStates.TYPE)
 
 @router.message(CreateEventStates.TYPE)
 async def process_event_type(message: Message, state: FSMContext):
@@ -702,8 +712,9 @@ async def process_confirmation(message: Message, state: FSMContext):
             await state.clear()
         
     elif message.text == BTN_EDIT:
-        await state.set_state(CreateEventStates.TYPE)
-        await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb())
+        # Вернуться к началу создания — единый экран
+        await state.set_state(CreateEventStates.step_1)
+        await send_create_intro(message, state)
     else:
         await message.answer(
             "❌ <b>Пожалуйста, выберите вариант:</b>",
