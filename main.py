@@ -124,8 +124,7 @@ async def handle_full_event(event_id: int):
    • Люди ждут твоего события
    • Сделай это незабываемым!
 
-💡 <b>Совет:</b> Начни диалог с приветствия и краткого плана!""",
-                parse_mode="HTML"
+💡 <b>Совет:</b> Начни диалог с приветствия и краткого плана!"""
             )
         
         # 2. Уведомление всем участникам
@@ -153,8 +152,7 @@ async def handle_full_event(event_id: int):
 🎯 <i>Если организатор не связался с вами до {date}, 
 напишите ему напрямую: {contact}</i>
 
-💫 <b>Желаем отличного времяпровождения!</b>""",
-                        parse_mode="HTML"
+💫 <b>Желаем отличного времяпровождения!</b>"""
                     )
                 except Exception as e:
                     logging.error(f"Failed to notify participant {telegram_id}: {e}")
@@ -219,8 +217,7 @@ async def cmd_start(message: Message, state: FSMContext):
                     
                     await message.answer(
                         text, 
-                        reply_markup=get_event_details_kb(event_id, message.from_user.id, is_confirmed), 
-                        parse_mode="HTML"
+                        reply_markup=get_event_details_kb(event_id, message.from_user.id, is_confirmed)
                     )
                 else:
                     await message.answer(ERROR_EVENT_NOT_FOUND)
@@ -281,7 +278,6 @@ async def my_profile(message: Message, state: FSMContext):
     await state.set_state(ProfileStates.VIEWING)
     await message.answer(
         profile_text,
-        parse_mode="HTML",
         reply_markup=get_profile_kb(message.from_user.id, ADMIN_IDS, is_creator)
     )
 
@@ -290,7 +286,6 @@ async def how_to_use(message: Message, state: FSMContext):
     await state.set_state(MainStates.MAIN_MENU)
     await message.answer(
         HELP_TEXT,
-        parse_mode="HTML",
         reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
     )
 
@@ -435,16 +430,14 @@ async def process_event_type_other(message: Message, state: FSMContext):
         if len(custom_type) < 3:
             await message.answer(
                 "❌ <b>Название слишком короткое!</b>\n\nМинимум 3 символа. Примеры:\n• Танцы\n• Волейбол\n• Пикник\n\nВведите снова:",
-                reply_markup=get_back_cancel_kb(),
-                parse_mode="HTML"
+                reply_markup=get_back_cancel_kb()
             )
             return
         
         if len(custom_type) > 50:
             await message.answer(
                 "❌ <b>Название слишком длинное!</b>\n\nМаксимум 50 символов. Введите короче.",
-                reply_markup=get_back_cancel_kb(),
-                parse_mode="HTML"
+                reply_markup=get_back_cancel_kb()
             )
             return
         
@@ -453,8 +446,7 @@ async def process_event_type_other(message: Message, state: FSMContext):
         
         await message.answer(
             CREATE_EVENT_DATE.format(event_type=custom_type),
-            reply_markup=get_back_cancel_kb(),
-            parse_mode="HTML"
+            reply_markup=get_back_cancel_kb()
         )
     except Exception as e:
         logging.error(f"Error in process_event_type_other: {e}")
@@ -497,8 +489,7 @@ async def process_event_date(message: Message, state: FSMContext):
     
     await message.answer(
         CREATE_EVENT_TIME.format(date=date_str),
-        reply_markup=get_back_cancel_kb(),
-        parse_mode="HTML"
+        reply_markup=get_back_cancel_kb()
     )
 
 @router.message(CreateEventStates.TIME)
@@ -520,14 +511,12 @@ async def process_event_time(message: Message, state: FSMContext):
         
         await message.answer(
             CREATE_EVENT_MAX_PARTICIPANTS.format(time=time_str),
-            reply_markup=get_back_cancel_kb(),
-            parse_mode="HTML"
+            reply_markup=get_back_cancel_kb()
         )
     except ValueError:
         await message.answer(
             ERROR_INVALID_TIME,
-            reply_markup=get_back_cancel_kb(),
-            parse_mode="HTML"
+            reply_markup=get_back_cancel_kb()
         )
     except Exception as e:
         logging.error(f"Error in process_event_time: {e}")
@@ -550,22 +539,19 @@ async def process_max_participants(message: Message, state: FSMContext):
         if max_participants < 2:
             await message.answer(
                 "❌ <b>Минимум 2 участника!</b>\n\nВведите число больше или равное 2. Например: 10",
-                reply_markup=get_back_cancel_kb(),
-                parse_mode="HTML"
+                reply_markup=get_back_cancel_kb()
             )
             return
         if max_participants > 1000:
             await message.answer(
                 "❌ <b>Слишком много!</b>\n\nМаксимум 1000 участников. Введите меньше.",
-                reply_markup=get_back_cancel_kb(),
-                parse_mode="HTML"
+                reply_markup=get_back_cancel_kb()
             )
             return
     except ValueError:
         await message.answer(
             "❌ <b>Это не число!</b>\n\nВведите просто цифры, например: <code>10</code>",
-            reply_markup=get_back_cancel_kb(),
-            parse_mode="HTML"
+            reply_markup=get_back_cancel_kb()
         )
         return
     
@@ -591,16 +577,14 @@ async def process_description(message: Message, state: FSMContext):
     if len(description) < 10:
         await message.answer(
             ERROR_DESCRIPTION_TOO_SHORT,
-            reply_markup=get_back_cancel_kb(),
-            parse_mode="HTML"
+            reply_markup=get_back_cancel_kb()
         )
         return
     
     if len(description) > 500:
         await message.answer(
             "❌ <b>Описание слишком длинное!</b>\n\nМаксимум 500 символов. Сократите текст.",
-            reply_markup=get_back_cancel_kb(),
-            parse_mode="HTML"
+            reply_markup=get_back_cancel_kb()
         )
         return
     
@@ -609,8 +593,7 @@ async def process_description(message: Message, state: FSMContext):
     
     await message.answer(
         CREATE_EVENT_CONTACT.format(description_preview=description[:100]),
-        reply_markup=get_back_cancel_kb(),
-        parse_mode="HTML"
+        reply_markup=get_back_cancel_kb()
     )
 
 @router.message(CreateEventStates.CONTACT)
@@ -628,16 +611,14 @@ async def process_contact(message: Message, state: FSMContext):
         if len(contact) < 3:
             await message.answer(
                 ERROR_CONTACT_TOO_SHORT,
-                reply_markup=get_back_cancel_kb(),
-                parse_mode="HTML"
+                reply_markup=get_back_cancel_kb()
             )
             return
         
         if len(contact) > 100:
             await message.answer(
                 "❌ <b>Контакт слишком длинный!</b>\n\nМаксимум 100 символов. Введите короче.",
-                reply_markup=get_back_cancel_kb(),
-                parse_mode="HTML"
+                reply_markup=get_back_cancel_kb()
             )
             return
         
@@ -657,7 +638,7 @@ async def process_contact(message: Message, state: FSMContext):
             contact=contact
         )
         
-        await message.answer(text, reply_markup=get_confirm_kb(), parse_mode="HTML")
+        await message.answer(text, reply_markup=get_confirm_kb())
     except Exception as e:
         logging.error(f"Error in process_contact: {e}")
         await message.answer(
@@ -705,30 +686,28 @@ async def process_confirmation(message: Message, state: FSMContext):
             
             await state.clear()
             await state.set_state(MainStates.MAIN_MENU)
-            await message.answer(text, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS), parse_mode="HTML")
+            await message.answer(text, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS))
             
             instructions = EVENT_NEXT_STEPS.format(invite_link=invite_link)
             
-            await message.answer(instructions, parse_mode="HTML")
+            await message.answer(instructions)
             
             logging.info(f"Event created: ID={event_id}, creator={message.from_user.id}, type={event_type}")
         except Exception as e:
             logging.error(f"Error creating event: {e}", exc_info=True)
             await message.answer(
                 "❌ <b>Произошла ошибка при создании события</b>\n\nПопробуйте снова позже или напишите в поддержку.",
-                reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS),
-                parse_mode="HTML"
+                reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
             )
             await state.clear()
         
     elif message.text == BTN_EDIT:
         await state.set_state(CreateEventStates.TYPE)
-        await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb(), parse_mode="HTML")
+        await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb())
     else:
         await message.answer(
             "❌ <b>Пожалуйста, выберите вариант:</b>",
-            reply_markup=get_confirm_kb(),
-            parse_mode="HTML"
+            reply_markup=get_confirm_kb()
         )
 
 @router.message(F.text == BTN_FIND)
@@ -743,8 +722,7 @@ async def start_search(message: Message, state: FSMContext):
     
     if not events:
         await message.answer(
-            SEARCH_NO_EVENTS.format(city=city),
-            parse_mode="HTML"
+            SEARCH_NO_EVENTS.format(city=city)
         )
         return
     
@@ -752,14 +730,12 @@ async def start_search(message: Message, state: FSMContext):
     
     await message.answer(
         SEARCH_FOUND_EVENTS.format(city=city, count=len(events)),
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode="HTML"
+        reply_markup=ReplyKeyboardRemove()
     )
     
     await message.answer(
         SEARCH_EVENTS_LIST,
-        reply_markup=get_event_list_kb(events),
-        parse_mode="HTML"
+        reply_markup=get_event_list_kb(events)
     )
 
 @router.callback_query(F.data.startswith(CB_EVENT_VIEW))
@@ -804,8 +780,7 @@ async def view_event_details(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         text, 
-        reply_markup=get_event_details_kb(event_id, callback.from_user.id, is_confirmed), 
-        parse_mode="HTML"
+        reply_markup=get_event_details_kb(event_id, callback.from_user.id, is_confirmed)
     )
     await callback.answer()
 
@@ -836,7 +811,7 @@ async def join_event_start(callback: CallbackQuery, state: FSMContext):
         fee=PLATFORM_FEE
     )
     
-    await callback.message.edit_text(text, reply_markup=get_payment_kb(event_id), parse_mode="HTML")
+    await callback.message.edit_text(text, reply_markup=get_payment_kb(event_id))
     await callback.answer()
 
 @router.callback_query(F.data.startswith(CB_EVENT_BACK))
@@ -882,8 +857,7 @@ async def back_from_payment(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         text, 
-        reply_markup=get_event_details_kb(event_id, callback.from_user.id, is_confirmed), 
-        parse_mode="HTML"
+        reply_markup=get_event_details_kb(event_id, callback.from_user.id, is_confirmed)
     )
     await callback.answer()
 
@@ -950,8 +924,7 @@ async def process_payment(callback: CallbackQuery, state: FSMContext):
         
         await callback.message.edit_text(
             text, 
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), 
-            parse_mode="HTML"
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
         )
     
     await callback.answer()
@@ -974,8 +947,7 @@ async def invite_friend(callback: CallbackQuery):
     invite_link = f"https://t.me/{bot._me.username}?start=invite_{event_id}_{inviter_id}"
     
     await callback.message.answer(
-        INVITE_LINK_TEXT.format(invite_link=invite_link),
-        parse_mode="HTML"
+        INVITE_LINK_TEXT.format(invite_link=invite_link)
     )
     await callback.answer()
 
@@ -986,7 +958,6 @@ async def show_my_bookings(callback: CallbackQuery, state: FSMContext):
     if not bookings:
         await callback.message.edit_text(
             MY_BOOKINGS_EMPTY_WITH_SUGGESTION,
-            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔍 Найти события", callback_data=CB_NAV_BACK_TO_MAIN)],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_NAV_BACK_TO_PROFILE)]
@@ -1014,7 +985,6 @@ async def show_my_bookings(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.MY_BOOKINGS)
     await callback.message.edit_text(
         bookings_text,
-        parse_mode="HTML",
         reply_markup=get_my_bookings_kb(bookings[:10])
     )
     await callback.answer()
@@ -1026,7 +996,6 @@ async def show_my_events(callback: CallbackQuery, state: FSMContext):
     if not events:
         await callback.message.edit_text(
             MY_EVENTS_EMPTY_WITH_SUGGESTION,
-            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="➕ Создать событие", callback_data=CB_NAV_BACK_TO_MAIN)],
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_NAV_BACK_TO_PROFILE)]
@@ -1058,7 +1027,6 @@ async def show_my_events(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.MY_EVENTS)
     await callback.message.edit_text(
         events_text,
-        parse_mode="HTML",
         reply_markup=get_my_events_kb(events)
     )
     await callback.answer()
@@ -1099,7 +1067,6 @@ async def show_my_event_details(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.MY_EVENTS)
     await callback.message.edit_text(
         text,
-        parse_mode="HTML",
         reply_markup=get_event_manage_kb(event_id)
     )
     await callback.answer()
@@ -1113,7 +1080,6 @@ async def show_event_participants(callback: CallbackQuery, state: FSMContext):
     if not participants:
         await callback.message.edit_text(
             EVENT_PARTICIPANTS_EMPTY,
-            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{CB_EVENT_MY}{event_id}")]
             ])
@@ -1135,7 +1101,6 @@ async def show_event_participants(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.MY_EVENTS)
     await callback.message.edit_text(
         participants_text,
-        parse_mode="HTML",
         reply_markup=get_participants_kb(event_id, participants)
     )
     await callback.answer()
@@ -1166,7 +1131,7 @@ async def show_user_info(callback: CallbackQuery):
         created_date=created_date
     )
 
-    await callback.message.answer(text, parse_mode="HTML")
+    await callback.message.answer(text)
     await callback.answer()
 
 # ХЭНДЛЕРЫ НАВИГАЦИИ - БЕЗ СОСТОЯНИЙ, ЧТОБЫ РАБОТАЛИ ВЕЗДЕ
@@ -1207,7 +1172,6 @@ async def back_to_profile(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.VIEWING)
     await callback.message.edit_text(
         profile_text,
-        parse_mode="HTML",
         reply_markup=get_profile_kb(callback.from_user.id, ADMIN_IDS, is_creator)
     )
     await callback.answer()
@@ -1221,9 +1185,9 @@ async def back_to_search(callback: CallbackQuery, state: FSMContext):
     
     if events:
         text = SEARCH_FOUND_EVENTS.format(city=city, count=len(events)) + "\n\nВыберите событие:"
-        await callback.message.edit_text(text, reply_markup=get_event_list_kb(events), parse_mode="HTML")
+        await callback.message.edit_text(text, reply_markup=get_event_list_kb(events))
     else:
-        await callback.message.edit_text(SEARCH_NO_EVENTS.format(city=city), parse_mode="HTML")
+        await callback.message.edit_text(SEARCH_NO_EVENTS.format(city=city))
         await callback.message.answer(
             BACK_TO_MAIN,
             reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS)
@@ -1239,7 +1203,6 @@ async def back_to_my_events(callback: CallbackQuery, state: FSMContext):
     if not events:
         await callback.message.edit_text(
             MY_EVENTS_EMPTY_WITH_SUGGESTION,
-            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_NAV_BACK_TO_PROFILE)]
             ])
@@ -1267,7 +1230,6 @@ async def back_to_my_events(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.MY_EVENTS)
     await callback.message.edit_text(
         events_text,
-        parse_mode="HTML",
         reply_markup=get_my_events_kb(events)
     )
     await callback.answer()
@@ -1279,7 +1241,6 @@ async def back_to_my_bookings(callback: CallbackQuery, state: FSMContext):
     if not bookings:
         await callback.message.edit_text(
             MY_BOOKINGS_EMPTY_WITH_SUGGESTION,
-            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="⬅️ Назад", callback_data=CB_NAV_BACK_TO_PROFILE)]
             ])
@@ -1306,7 +1267,6 @@ async def back_to_my_bookings(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.MY_BOOKINGS)
     await callback.message.edit_text(
         bookings_text,
-        parse_mode="HTML",
         reply_markup=get_my_bookings_kb(bookings[:10])
     )
     await callback.answer()
@@ -1323,7 +1283,6 @@ async def cancel_booking(callback: CallbackQuery, state: FSMContext):
         if not event:
             await callback.message.edit_text(
                 BOOKING_NOT_FOUND,
-                parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]
                 ])
@@ -1349,7 +1308,6 @@ async def cancel_booking(callback: CallbackQuery, state: FSMContext):
                     city=city,
                     date_time=date_time
                 ),
-                parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="📋 Мои бронирования", callback_data=CB_PROFILE_MY_BOOKINGS)],
                     [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]
@@ -1361,7 +1319,6 @@ async def cancel_booking(callback: CallbackQuery, state: FSMContext):
         else:
             await callback.message.edit_text(
                 BOOKING_NOT_FOUND,
-                parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="📋 Мои бронирования", callback_data=CB_PROFILE_MY_BOOKINGS)],
                     [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]
@@ -1373,7 +1330,6 @@ async def cancel_booking(callback: CallbackQuery, state: FSMContext):
         logging.error(f"Error cancelling booking: {e}", exc_info=True)
         await callback.message.edit_text(
             BOOKING_CANCEL_ERROR,
-            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📋 Мои бронирования", callback_data=CB_PROFILE_MY_BOOKINGS)],
                 [InlineKeyboardButton(text="⬅️ Назад в профиль", callback_data=CB_NAV_BACK_TO_PROFILE)]

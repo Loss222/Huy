@@ -158,8 +158,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         await state.set_state(AdminStates.MENU)
         await callback.message.edit_text(
             ADMIN_MENU_TITLE, 
-            reply_markup=get_admin_main_kb(), 
-            parse_mode="HTML"
+            reply_markup=get_admin_main_kb()
         )
         await callback.answer()
     
@@ -193,8 +192,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         
         await callback.message.edit_text(
             stats_text,
-            reply_markup=get_admin_main_kb(),
-            parse_mode="HTML"
+            reply_markup=get_admin_main_kb()
         )
         await callback.answer()
     
@@ -212,16 +210,14 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         if not events:
             await callback.message.edit_text(
                 ADMIN_EVENTS_EMPTY,
-                reply_markup=get_admin_main_kb(),
-                parse_mode="HTML"
+                reply_markup=get_admin_main_kb()
             )
             await callback.answer()
             return
         
         await callback.message.edit_text(
             ADMIN_EVENTS_FOUND.format(count=len(events)),
-            reply_markup=get_admin_events_kb(events),
-            parse_mode="HTML"
+            reply_markup=get_admin_events_kb(events)
         )
         await callback.answer()
     
@@ -279,8 +275,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         
         await callback.message.edit_text(
             event_text,
-            reply_markup=get_admin_event_detail_kb(event_id),
-            parse_mode="HTML"
+            reply_markup=get_admin_event_detail_kb(event_id)
         )
         await callback.answer()
     
@@ -306,8 +301,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         if not bookings:
             await callback.message.edit_text(
                 ADMIN_BOOKINGS_EMPTY,
-                reply_markup=get_admin_main_kb(),
-                parse_mode="HTML"
+                reply_markup=get_admin_main_kb()
             )
             await callback.answer()
             return
@@ -335,8 +329,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         
         await callback.message.edit_text(
             bookings_text,
-            reply_markup=get_admin_bookings_kb(bookings, page, total_pages),
-            parse_mode="HTML"
+            reply_markup=get_admin_bookings_kb(bookings, page, total_pages)
         )
         await callback.answer()
     
@@ -379,7 +372,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
             status=status
         )
 
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_main_kb())
+        await callback.message.edit_text(text, reply_markup=get_admin_main_kb())
         await callback.answer()
     
     @admin_router.callback_query(F.data.startswith(CB_ADMIN_BOOKINGS_PAGE))
@@ -404,8 +397,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         if not bookings:
             await callback.message.edit_text(
                 f"🎟 <b>Список бронирований</b>\n\nНа странице {page+1}/{total_pages} нет бронирований.",
-                reply_markup=get_admin_main_kb(),
-                parse_mode="HTML"
+                reply_markup=get_admin_main_kb()
             )
             await callback.answer()
             return
@@ -433,8 +425,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         
         await callback.message.edit_text(
             bookings_text,
-            reply_markup=get_admin_bookings_kb(bookings, page, total_pages),
-            parse_mode="HTML"
+            reply_markup=get_admin_bookings_kb(bookings, page, total_pages)
         )
         await callback.answer()
     
@@ -447,7 +438,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
             return
         
         await state.set_state(AdminStates.MENU)
-        await message.answer(ADMIN_MENU_TITLE, reply_markup=get_admin_main_kb(), parse_mode="HTML")
+        await message.answer(ADMIN_MENU_TITLE, reply_markup=get_admin_main_kb())
     
     # FALLBACK для необработанных админских callback'ов
     @admin_router.callback_query(F.data.startswith("admin:"))

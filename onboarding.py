@@ -116,11 +116,10 @@ def register_onboarding(db: Database, admin_ids: list):
                     text += EVENT_JOIN_PROMPT
                 
                 from keyboards import get_event_details_kb
-                await callback.message.edit_text(text, parse_mode="HTML")
+                await callback.message.edit_text(text)
                 await callback.message.answer(
                     text, 
-                    reply_markup=get_event_details_kb(invite_event_id, callback.from_user.id, is_confirmed), 
-                    parse_mode="HTML"
+                    reply_markup=get_event_details_kb(invite_event_id, callback.from_user.id, is_confirmed)
                 )
             else:
                 await callback.message.edit_text(
