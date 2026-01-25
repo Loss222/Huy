@@ -25,11 +25,7 @@ PLATFORM_FEE = 99
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 router = Router()
-dp.include_router(router)
-
-
-# Middleware removed. If you want raw update dumps, we can add
-# simple non-blocking logging handlers for messages and callbacks below.
+fallback_router = Router()
 
 # Инициализация БД и регистрация модулей
 db = Database()
@@ -37,81 +33,6 @@ db = Database()
 # РЕГИСТРАЦИЯ АДМИНКИ И ОНБОРДИНГА
 admin_router = register_admin(db, bot, ADMIN_IDS, PLATFORM_FEE)
 onboarding_router = register_onboarding(db, ADMIN_IDS)
-
-# ОБРАБОТЧИК ОТМЕНЫ БРОНИРОВАНИЯ
-@router.callback_query(F.data.startswith(CB_BOOKING_CANCEL))
-async def cancel_booking(callback: CallbackQuery, state: FSMContext):
-    """Обработчик отмены бронирования"""
-    try:
-        event_id = int(callback.data.split(CB_BOOKING_CANCEL, 1)[1])
-        
-        # Получаем информацию о событии
-        event = await db.get_event_details(event_id)
-        
-        if not event:
-            await callback.answer(BOOKING_NOT_FOUND)
-            return
-        
-        event_type, custom_type, city, date, time, *_ = event
-        display_type = custom_type or event_type
-        date_time = f"{date} {time}"
-        
-        # Отменяем бронирование
-        success = await db.cancel_booking(callback.from_user.id, event_id)
-        
-        if success:
-            # Показываем сообщение об успешной отмене
-            await callback.message.edit_text(
-                BOOKING_CANCEL_SUCCESS.format(
-                    event_type=display_type,
-                    city=city,
-                    date_time=date_time
-                ),
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ К бронированиям", callback_data=CB_PROFILE_MY_BOOKINGS)],
-                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data=CB_NAV_BACK_TO_MAIN)]
-                ])
-            )
-            await callback.answer("✅ Бронирование отменено", show_alert=False)
-            logging.info(f"Booking cancelled: user {callback.from_user.id}, event {event_id}")
-        else:
-            await callback.answer(BOOKING_NOT_FOUND, show_alert=True)
-            
-    except ValueError:
-        logging.error(f"Invalid event_id format in CB_BOOKING_CANCEL: {callback.data}")
-        await callback.answer(BOOKING_CANCEL_ERROR, show_alert=True)
-    except Exception as e:
-        logging.error(f"Error cancelling booking: {e}")
-        await callback.answer(BOOKING_CANCEL_ERROR, show_alert=True)
-
-# FALLBACK ROUTER - обработка неопознанных сообщений
-fallback_router = Router()
-
-@fallback_router.message()
-async def handle_any_message(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    
-    # Если мы в админских состояниях - игнорируем
-    if current_state and "AdminStates" in current_state:
-        return
-    
-    # Если не в состоянии создания события, предлагаем вернуться в главное меню
-    if not str(current_state).startswith("CreateEventStates"):
-        await message.answer(
-            "Пожалуйста, используйте кнопки меню. Если хотите вернуться в главное меню, нажмите /start",
-            reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
-        )
-    else:
-        # В состоянии создания события показываем соответствующую клавиатуру
-        await message.answer(
-            "Пожалуйста, используйте кнопки навигации при создании события:",
-            reply_markup=get_back_cancel_kb()
-        )
-
-dp.include_router(admin_router)
-dp.include_router(onboarding_router)
-dp.include_router(fallback_router)
 
 async def notify_admin_booking(event_data: dict):
     for admin_id in ADMIN_IDS:
@@ -508,19 +429,40 @@ async def process_event_type_other(message: Message, state: FSMContext):
         await go_back(message, state)
         return
     
-    custom_type = message.text.strip()
-    
-    if len(custom_type) < 3:
-        await message.answer("Название события должно содержать минимум 3 символа. Введите снова:")
-        return
-    
-    await state.update_data(type="Другое", custom_type=custom_type)
-    await state.set_state(CreateEventStates.DATE)
-    
-    await message.answer(
-        CREATE_EVENT_DATE.format(event_type=custom_type),
-        reply_markup=get_back_cancel_kb()
-    )
+    try:
+        custom_type = message.text.strip()
+        
+        if len(custom_type) < 3:
+            await message.answer(
+                "❌ <b>Название слишком короткое!</b>\n\nМинимум 3 символа. Примеры:\n• Танцы\n• Волейбол\n• Пикник\n\nВведите снова:",
+                reply_markup=get_back_cancel_kb(),
+                parse_mode="HTML"
+            )
+            return
+        
+        if len(custom_type) > 50:
+            await message.answer(
+                "❌ <b>Название слишком длинное!</b>\n\nМаксимум 50 символов. Введите короче.",
+                reply_markup=get_back_cancel_kb(),
+                parse_mode="HTML"
+            )
+            return
+        
+        await state.update_data(type="Другое", custom_type=custom_type)
+        await state.set_state(CreateEventStates.DATE)
+        
+        await message.answer(
+            CREATE_EVENT_DATE.format(event_type=custom_type),
+            reply_markup=get_back_cancel_kb(),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logging.error(f"Error in process_event_type_other: {e}")
+        await message.answer(
+            "❌ Ошибка при обработке. Попробуйте снова.",
+            reply_markup=get_back_cancel_kb()
+        )
+
 
 @router.message(CreateEventStates.DATE)
 async def process_event_date(message: Message, state: FSMContext):
@@ -539,11 +481,15 @@ async def process_event_date(message: Message, state: FSMContext):
         
         if event_date < today:
             await message.answer(
-                "❌ Дата не может быть в прошлом.\nВведите будущую дату в формате ДД.ММ.ГГГГ:"
+                ERROR_PAST_DATE,
+                reply_markup=get_back_cancel_kb()
             )
             return
     except ValueError:
-        await message.answer(ERROR_INVALID_DATE + "\nВведите дату в формате ДД.ММ.ГГГГ\nНапример: 25.12.2024")
+        await message.answer(
+            ERROR_INVALID_DATE,
+            reply_markup=get_back_cancel_kb()
+        )
         return
     
     await state.update_data(date=date_str)
@@ -551,7 +497,8 @@ async def process_event_date(message: Message, state: FSMContext):
     
     await message.answer(
         CREATE_EVENT_TIME.format(date=date_str),
-        reply_markup=get_back_cancel_kb()
+        reply_markup=get_back_cancel_kb(),
+        parse_mode="HTML"
     )
 
 @router.message(CreateEventStates.TIME)
@@ -563,21 +510,31 @@ async def process_event_time(message: Message, state: FSMContext):
         await go_back(message, state)
         return
     
-    time_str = message.text.strip()
-    
     try:
+        time_str = message.text.strip()
+        
         datetime.strptime(time_str, "%H:%M")
+        
+        await state.update_data(time=time_str)
+        await state.set_state(CreateEventStates.MAX_PARTICIPANTS)
+        
+        await message.answer(
+            CREATE_EVENT_MAX_PARTICIPANTS.format(time=time_str),
+            reply_markup=get_back_cancel_kb(),
+            parse_mode="HTML"
+        )
     except ValueError:
-        await message.answer(ERROR_INVALID_TIME + "\nВведите время в формате ЧЧ:ММ\nНапример: 19:00")
-        return
-    
-    await state.update_data(time=time_str)
-    await state.set_state(CreateEventStates.MAX_PARTICIPANTS)
-    
-    await message.answer(
-        CREATE_EVENT_MAX_PARTICIPANTS.format(time=time_str),
-        reply_markup=get_back_cancel_kb()
-    )
+        await message.answer(
+            ERROR_INVALID_TIME,
+            reply_markup=get_back_cancel_kb(),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logging.error(f"Error in process_event_time: {e}")
+        await message.answer(
+            "❌ Ошибка при обработке. Попробуйте снова.",
+            reply_markup=get_back_cancel_kb()
+        )
 
 @router.message(CreateEventStates.MAX_PARTICIPANTS)
 async def process_max_participants(message: Message, state: FSMContext):
@@ -591,10 +548,25 @@ async def process_max_participants(message: Message, state: FSMContext):
     try:
         max_participants = int(message.text)
         if max_participants < 2:
-            await message.answer("❌ Минимум должно быть 2 участника. Введите снова:")
+            await message.answer(
+                "❌ <b>Минимум 2 участника!</b>\n\nВведите число больше или равное 2. Например: 10",
+                reply_markup=get_back_cancel_kb(),
+                parse_mode="HTML"
+            )
+            return
+        if max_participants > 1000:
+            await message.answer(
+                "❌ <b>Слишком много!</b>\n\nМаксимум 1000 участников. Введите меньше.",
+                reply_markup=get_back_cancel_kb(),
+                parse_mode="HTML"
+            )
             return
     except ValueError:
-        await message.answer("❌ Пожалуйста, введите число (например: 10):")
+        await message.answer(
+            "❌ <b>Это не число!</b>\n\nВведите просто цифры, например: <code>10</code>",
+            reply_markup=get_back_cancel_kb(),
+            parse_mode="HTML"
+        )
         return
     
     await state.update_data(max_participants=max_participants)
@@ -617,7 +589,19 @@ async def process_description(message: Message, state: FSMContext):
     description = message.text.strip()
     
     if len(description) < 10:
-        await message.answer(ERROR_DESCRIPTION_TOO_SHORT)
+        await message.answer(
+            ERROR_DESCRIPTION_TOO_SHORT,
+            reply_markup=get_back_cancel_kb(),
+            parse_mode="HTML"
+        )
+        return
+    
+    if len(description) > 500:
+        await message.answer(
+            "❌ <b>Описание слишком длинное!</b>\n\nМаксимум 500 символов. Сократите текст.",
+            reply_markup=get_back_cancel_kb(),
+            parse_mode="HTML"
+        )
         return
     
     await state.update_data(description=description)
@@ -625,7 +609,8 @@ async def process_description(message: Message, state: FSMContext):
     
     await message.answer(
         CREATE_EVENT_CONTACT.format(description_preview=description[:100]),
-        reply_markup=get_back_cancel_kb()
+        reply_markup=get_back_cancel_kb(),
+        parse_mode="HTML"
     )
 
 @router.message(CreateEventStates.CONTACT)
@@ -637,29 +622,49 @@ async def process_contact(message: Message, state: FSMContext):
         await go_back(message, state)
         return
     
-    contact = message.text.strip()
-    
-    if len(contact) < 3:
-        await message.answer(ERROR_CONTACT_TOO_SHORT)
+    try:
+        contact = message.text.strip()
+        
+        if len(contact) < 3:
+            await message.answer(
+                ERROR_CONTACT_TOO_SHORT,
+                reply_markup=get_back_cancel_kb(),
+                parse_mode="HTML"
+            )
+            return
+        
+        if len(contact) > 100:
+            await message.answer(
+                "❌ <b>Контакт слишком длинный!</b>\n\nМаксимум 100 символов. Введите короче.",
+                reply_markup=get_back_cancel_kb(),
+                parse_mode="HTML"
+            )
+            return
+        
+        await state.update_data(contact=contact)
+        await state.set_state(CreateEventStates.CONFIRMATION)
+        
+        data = await state.get_data()
+        event_type = data.get('custom_type') or data['type']
+        
+        text = CREATE_EVENT_CONFIRMATION.format(
+            event_type=event_type,
+            city=data['city'],
+            date=data['date'],
+            time=data['time'],
+            max_participants=data['max_participants'],
+            description_preview=data['description'][:100],
+            contact=contact
+        )
+        
+        await message.answer(text, reply_markup=get_confirm_kb(), parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"Error in process_contact: {e}")
+        await message.answer(
+            "❌ Ошибка при обработке. Попробуйте снова.",
+            reply_markup=get_back_cancel_kb()
+        )
         return
-    
-    await state.update_data(contact=contact)
-    await state.set_state(CreateEventStates.CONFIRMATION)
-    
-    data = await state.get_data()
-    event_type = data.get('custom_type') or data['type']
-    
-    text = CREATE_EVENT_CONFIRMATION.format(
-        event_type=event_type,
-        city=data['city'],
-        date=data['date'],
-        time=data['time'],
-        max_participants=data['max_participants'],
-        description_preview=data['description'][:100],
-        contact=contact
-    )
-    
-    await message.answer(text, reply_markup=get_confirm_kb(), parse_mode="HTML")
 
 @router.message(CreateEventStates.CONFIRMATION)
 async def process_confirmation(message: Message, state: FSMContext):
@@ -671,39 +676,59 @@ async def process_confirmation(message: Message, state: FSMContext):
         return
     
     if message.text == BTN_CONFIRM:
-        data = await state.get_data()
-        
-        event_id = await db.create_event(data, message.from_user.id)
-        
-        invite_link = f"https://t.me/{bot._me.username}?start=invite_{event_id}_{message.from_user.id}"
-        
-        event_type = data.get('custom_type') or data['type']
-        
-        text = EVENT_CREATED.format(
-            event_type=event_type,
-            city=data['city'],
-            date=data['date'],
-            time=data['time'],
-            max_participants=data['max_participants'],
-            description_preview=data['description'][:200],
-            contact=data['contact']
-        )
-        
-        await state.clear()
-        await state.set_state(MainStates.MAIN_MENU)
-        await message.answer(text, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS), parse_mode="HTML")
-        
-        instructions = EVENT_NEXT_STEPS.format(invite_link=invite_link)
-        
-        await message.answer(instructions, parse_mode="HTML")
+        try:
+            data = await state.get_data()
+            
+            event_id = await db.create_event(data, message.from_user.id)
+            
+            if not event_id:
+                await message.answer(
+                    "❌ <b>Ошибка при создании события</b>\n\nПопробуйте снова позже.",
+                    reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
+                )
+                await state.clear()
+                return
+            
+            invite_link = f"https://t.me/{bot._me.username}?start=invite_{event_id}_{message.from_user.id}"
+            
+            event_type = data.get('custom_type') or data['type']
+            
+            text = EVENT_CREATED.format(
+                event_type=event_type,
+                city=data['city'],
+                date=data['date'],
+                time=data['time'],
+                max_participants=data['max_participants'],
+                description_preview=data['description'][:200],
+                contact=data['contact']
+            )
+            
+            await state.clear()
+            await state.set_state(MainStates.MAIN_MENU)
+            await message.answer(text, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS), parse_mode="HTML")
+            
+            instructions = EVENT_NEXT_STEPS.format(invite_link=invite_link)
+            
+            await message.answer(instructions, parse_mode="HTML")
+            
+            logging.info(f"Event created: ID={event_id}, creator={message.from_user.id}, type={event_type}")
+        except Exception as e:
+            logging.error(f"Error creating event: {e}", exc_info=True)
+            await message.answer(
+                "❌ <b>Произошла ошибка при создании события</b>\n\nПопробуйте снова позже или напишите в поддержку.",
+                reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS),
+                parse_mode="HTML"
+            )
+            await state.clear()
         
     elif message.text == BTN_EDIT:
         await state.set_state(CreateEventStates.TYPE)
-        await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb())
+        await message.answer(CREATE_EVENT_START, reply_markup=get_event_types_kb(), parse_mode="HTML")
     else:
         await message.answer(
-            "Пожалуйста, выберите вариант из предложенных:",
-            reply_markup=get_confirm_kb()
+            "❌ <b>Пожалуйста, выберите вариант:</b>",
+            reply_markup=get_confirm_kb(),
+            parse_mode="HTML"
         )
 
 @router.message(F.text == BTN_FIND)
@@ -1356,6 +1381,28 @@ async def cancel_booking(callback: CallbackQuery, state: FSMContext):
         )
         await callback.answer(BOOKING_CANCEL_ERROR, show_alert=True)
 
+# ============================================================
+# FALLBACK ROUTER HANDLERS
+# ============================================================
+# Fallback ТОЛЬКО для неизвестного текста
+# НЕ должен перехватывать:
+# - команды (/start и т.д.)
+# - callback_query (inline кнопки)
+# - текстовые кнопки (BTN_*)
+# - FSM обработчики
+# ============================================================
+
+@fallback_router.message(StateFilter(default_state))
+async def fallback_text_no_state(message: Message):
+    """Fallback для свободного текста БЕЗ состояния"""
+    try:
+        await message.answer(
+            FALLBACK_MESSAGE,
+            reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
+        )
+    except Exception as e:
+        logging.error(f"Error in fallback_text_no_state: {e}")
+
 @fallback_router.callback_query()
 async def callback_fallback(callback: CallbackQuery, state: FSMContext):
     # Неадресованные callback'и — показываем мягкий фоллбек
@@ -1364,6 +1411,21 @@ async def callback_fallback(callback: CallbackQuery, state: FSMContext):
     except Exception:
         pass
     await callback.answer()
+
+# ============================================================
+# ВКЛЮЧЕНИЕ РОУТЕРОВ В ПРАВИЛЬНОМ ПОРЯДКЕ
+# ============================================================
+# Порядок КРИТИЧЕСКИ ВАЖЕН:
+# 1. router - основная логика (команды, кнопки, callbacks)
+# 2. admin_router - админка
+# 3. onboarding_router - онбординг
+# 4. fallback_router - ВСЕГДА ПОСЛЕДНИЙ (ловит неизвестный текст)
+# ============================================================
+
+dp.include_router(router)
+dp.include_router(admin_router)
+dp.include_router(onboarding_router)
+dp.include_router(fallback_router)
 
 async def main():
     await db.init_db()
