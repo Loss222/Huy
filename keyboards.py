@@ -173,6 +173,8 @@ def get_profile_kb(telegram_id, admin_ids, is_creator=False):
     # Основные кнопки профиля
     keyboard.append([InlineKeyboardButton(text=BTN_MY_BOOKINGS, callback_data=CB_PROFILE_MY_BOOKINGS)])
     keyboard.append([InlineKeyboardButton(text=BTN_MY_EVENTS, callback_data=CB_PROFILE_MY_EVENTS)])
+    # Кнопка запроса вывода (показывается динамически из кода, но оставить возможность добавить)
+    keyboard.append([InlineKeyboardButton(text="💸 Запрос вывода", callback_data="withdraw:request")])
     keyboard.append([InlineKeyboardButton(text=BTN_BACK + " в главное меню", callback_data=CB_NAV_BACK_TO_MAIN)])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

@@ -62,6 +62,37 @@ class Database:
                     FOREIGN KEY (user_id) REFERENCES users(id)
                 )
             """)
+            # Добавляем колонку initiator_balance, если её нет (SQLite: ALTER TABLE ADD COLUMN)
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN initiator_balance REAL DEFAULT 0")
+            except Exception:
+                # колонка уже существует или СУБД не поддерживает ALTER в данном контексте
+                pass
+
+            # Таблицы транзакций инициатора и заявок на вывод
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS initiator_transactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    event_id INTEGER,
+                    amount REAL NOT NULL,
+                    reason TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS withdrawal_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    amount REAL NOT NULL,
+                    contact TEXT,
+                    status TEXT DEFAULT 'pending',
+                    admin_comment TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    processed_at TIMESTAMP
+                )
+            """)
             
             await db.commit()
 
@@ -421,6 +452,161 @@ class Database:
                 WHERE e.id = ?
             """, (event_id,))
             return await cursor.fetchone()
+
+    async def get_event_total_collected(self, event_id) -> float:
+        """Возвращает общую собранную сумму по событию.
+        Попытка: если есть поле amount_paid в event_participants, суммируем его для CONFIRMED.
+        Иначе — используем неявную модель: нет цены в events, возвращаем 0.
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            # Сначала пробуем найти поле amount в event_participants
+            try:
+                cursor = await db.execute(
+                    "SELECT SUM(amount_paid) FROM event_participants WHERE event_id = ? AND status = 'CONFIRMED'",
+                    (event_id,)
+                )
+                row = await cursor.fetchone()
+                total = row[0] if row and row[0] is not None else None
+            except Exception:
+                total = None
+
+            if total is not None:
+                return float(total)
+
+            # Если нет явных платежей, пытаемся получить цену из events.price
+            try:
+                cursor = await db.execute("SELECT price FROM events WHERE id = ?", (event_id,))
+                row = await cursor.fetchone()
+                price = row[0] if row else None
+            except Exception:
+                price = None
+
+            if price is not None:
+                cursor = await db.execute(
+                    "SELECT COUNT(*) FROM event_participants WHERE event_id = ? AND status = 'CONFIRMED'",
+                    (event_id,)
+                )
+                cnt = (await cursor.fetchone())[0]
+                return float(price) * int(cnt)
+
+            return 0.0
+
+    async def add_initiator_earnings_for_event(self, event_id, percent: float = 0.33) -> dict:
+        """Начислить инициатору долю от собранной суммы при завершении события.
+
+        Операция транзакционная.
+        """
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('BEGIN')
+
+                cursor = await db.execute("SELECT creator_id, CASE WHEN custom_type IS NOT NULL THEN custom_type ELSE type END as title FROM events WHERE id = ?", (event_id,))
+                row = await cursor.fetchone()
+                if not row:
+                    await db.execute('ROLLBACK')
+                    return {"success": False, "reason": "event_not_found"}
+
+                creator_id, title = row
+
+                total = await self.get_event_total_collected(event_id)
+                share = round(total * percent, 2)
+
+                if share <= 0:
+                    await db.execute('ROLLBACK')
+                    return {"success": False, "reason": "nothing"}
+
+                # Обновляем баланс инициатора (COALESCE на случай NULL)
+                await db.execute("UPDATE users SET initiator_balance = COALESCE(initiator_balance, 0) + ? WHERE id = ?", (share, creator_id))
+
+                await db.execute("INSERT INTO initiator_transactions (user_id, event_id, amount, reason) VALUES (?, ?, ?, 'event_completed')", (creator_id, event_id, share))
+
+                await db.execute('COMMIT')
+
+                # Получаем новый баланс
+                cursor = await db.execute("SELECT initiator_balance FROM users WHERE id = ?", (creator_id,))
+                new_balance = (await cursor.fetchone())[0] or 0.0
+
+                return {"success": True, "share": share, "user_id": creator_id, "new_balance": float(new_balance), "title": title}
+        except Exception as e:
+            logging.error(f"Error in add_initiator_earnings_for_event: {e}")
+            try:
+                async with aiosqlite.connect(self.db_path) as db:
+                    await db.execute('ROLLBACK')
+            except Exception:
+                pass
+            return {"success": False, "reason": "error"}
+
+    async def get_initiator_balance(self, user_id) -> float:
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("SELECT initiator_balance FROM users WHERE id = ?", (user_id,))
+            row = await cursor.fetchone()
+            return float(row[0]) if row and row[0] is not None else 0.0
+
+    async def create_withdraw_request(self, user_id, amount, contact) -> int:
+        async with aiosqlite.connect(self.db_path) as db:
+            # Проверяем баланс
+            cursor = await db.execute("SELECT initiator_balance FROM users WHERE id = ?", (user_id,))
+            row = await cursor.fetchone()
+            balance = float(row[0]) if row and row[0] is not None else 0.0
+            if balance < amount:
+                return -1
+
+            cursor = await db.execute("INSERT INTO withdrawal_requests (user_id, amount, contact, status) VALUES (?, ?, ?, 'pending')", (user_id, amount, contact))
+            req_id = cursor.lastrowid
+            await db.commit()
+            return req_id
+
+    async def list_withdrawal_requests(self, status=None):
+        async with aiosqlite.connect(self.db_path) as db:
+            if status:
+                cursor = await db.execute("SELECT id, user_id, amount, contact, status, created_at FROM withdrawal_requests WHERE status = ? ORDER BY created_at DESC", (status,))
+            else:
+                cursor = await db.execute("SELECT id, user_id, amount, contact, status, created_at FROM withdrawal_requests ORDER BY created_at DESC")
+            rows = await cursor.fetchall()
+            return [dict(id=r[0], user_id=r[1], amount=r[2], contact=r[3], status=r[4], created_at=r[5]) for r in rows]
+
+    async def mark_withdrawal_processed(self, request_id, admin_id, admin_comment=None) -> bool:
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute('BEGIN')
+                cursor = await db.execute("SELECT id, user_id, amount, status FROM withdrawal_requests WHERE id = ?", (request_id,))
+                row = await cursor.fetchone()
+                if not row or row[3] != 'pending':
+                    await db.execute('ROLLBACK')
+                    return False
+
+                _, user_id, amount, _ = row
+
+                cursor = await db.execute("SELECT initiator_balance FROM users WHERE id = ?", (user_id,))
+                bal_row = await cursor.fetchone()
+                balance = float(bal_row[0]) if bal_row and bal_row[0] is not None else 0.0
+                if balance < amount:
+                    await db.execute('ROLLBACK')
+                    return False
+
+                await db.execute("UPDATE users SET initiator_balance = initiator_balance - ? WHERE id = ?", (amount, user_id))
+                await db.execute("UPDATE withdrawal_requests SET status = 'processed', admin_comment = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?", (admin_comment, request_id))
+                await db.execute("INSERT INTO initiator_transactions (user_id, event_id, amount, reason) VALUES (?, NULL, ?, 'withdrawal_processed')", (user_id, -amount))
+                await db.execute('COMMIT')
+                return True
+        except Exception as e:
+            logging.error(f"Error processing withdrawal {request_id}: {e}")
+            try:
+                async with aiosqlite.connect(self.db_path) as db:
+                    await db.execute('ROLLBACK')
+            except Exception:
+                pass
+            return False
+
+    async def reject_withdrawal(self, request_id, admin_comment) -> bool:
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("UPDATE withdrawal_requests SET status = 'rejected', admin_comment = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?", (admin_comment, request_id))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error rejecting withdrawal {request_id}: {e}")
+            return False
 
     async def get_recent_bookings(self, limit=20, offset=0):
         async with aiosqlite.connect(self.db_path) as db:

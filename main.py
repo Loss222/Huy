@@ -21,6 +21,7 @@ from states import *
 BOT_TOKEN = "8104721228:AAHPnw-PHAMYMJARBvBULtm5_SeFcrhfm3g"
 ADMIN_IDS = [931410785]
 PLATFORM_FEE = 99
+MIN_WITHDRAW = 7000
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -298,10 +299,17 @@ async def my_profile(message: Message, state: FSMContext):
     
     user_events = await db.get_user_created_events(message.from_user.id)
     is_creator = len(user_events) > 0
-    
     await state.set_state(ProfileStates.VIEWING)
+    # Показываем баланс инициатора
+    creator_db_id = await db.get_user_id(message.from_user.id)
+    initiator_balance = 0.0
+    if creator_db_id:
+        initiator_balance = await db.get_initiator_balance(creator_db_id)
+
+    profile_earnings = PROFILE_EARNINGS.format(initiator_balance=round(initiator_balance, 2))
+
     await message.answer(
-        profile_text,
+        profile_text + "\n\n" + profile_earnings,
         reply_markup=get_profile_kb(message.from_user.id, ADMIN_IDS, is_creator)
     )
 
@@ -1228,6 +1236,80 @@ async def show_my_event_details(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
+
+@router.callback_query(F.data == "withdraw:request")
+async def withdraw_request(callback: CallbackQuery):
+    """Начало flow запроса вывода: проверяем баланс и даём инструкцию по отправке реквизитов (/withdraw)."""
+    # получить баланс
+    db_user_id = await db.get_user_id(callback.from_user.id)
+    if not db_user_id:
+        await callback.answer("Профиль не найден.", show_alert=True)
+        return
+
+    balance = await db.get_initiator_balance(db_user_id)
+    if balance < MIN_WITHDRAW:
+        await callback.answer(WITHDRAW_MIN_ERROR.format(min_withdraw=MIN_WITHDRAW, balance=round(balance,2)), show_alert=True)
+        return
+
+    await callback.message.answer(
+        f"Ваш баланс: {round(balance,2)} ₽. Чтобы создать заявку, отправьте команду:\n/withdraw <сумма> <реквизиты>\nПример: /withdraw {int(balance)} Сбербанк 410..."
+    )
+    await callback.answer()
+
+
+@router.message(Command('withdraw'))
+async def handle_withdraw_command(message: Message):
+    """Обрабатывает команду /withdraw <amount> <contact>. Если amount пропущен — пытается вывести весь баланс."""
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 2:
+        await message.answer("Использование: /withdraw <сумма> <реквизиты>")
+        return
+
+    # определяем сумму и контакт
+    amount = None
+    contact = None
+    if len(parts) == 2:
+        # возможно передали только реквизиты — используем весь баланс
+        contact = parts[1]
+    else:
+        # parts[1] может быть суммой
+        try:
+            amount = float(parts[1])
+            contact = parts[2] if len(parts) > 2 else ''
+        except ValueError:
+            # нет суммы — берем весь баланс, parts[1] это контакт
+            contact = message.text[len('/withdraw '):]
+
+    db_user_id = await db.get_user_id(message.from_user.id)
+    if not db_user_id:
+        await message.answer("Профиль не найден.")
+        return
+
+    balance = await db.get_initiator_balance(db_user_id)
+    if amount is None:
+        amount = round(balance, 2)
+
+    if amount <= 0 or amount > balance:
+        await message.answer(f"Неверная сумма. Доступно: {round(balance,2)} ₽")
+        return
+
+    req_id = await db.create_withdraw_request(db_user_id, amount, contact)
+    if req_id == -1:
+        await message.answer("Ошибка: недостаточно средств.")
+        return
+
+    await message.answer(WITHDRAW_REQUEST_CREATED_USER.format(amount=round(amount,2)))
+
+    # уведомляем админов
+    for admin_id in ADMIN_IDS:
+        try:
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Выполнить", callback_data=f"withdraw:process:{req_id}"), InlineKeyboardButton(text="Отклонить", callback_data=f"withdraw:reject:{req_id}")]
+            ])
+            await message.bot.send_message(admin_id, WITHDRAW_REQUEST_ADMIN_NOTIFY.format(id=req_id, user=message.from_user.id, amount=round(amount,2), contact=contact), reply_markup=kb)
+        except Exception as e:
+            logging.error(f"Failed to notify admin {admin_id} about withdrawal {req_id}: {e}")
+
 @router.callback_query(F.data.startswith(CB_EVENT_PARTICIPANTS))
 async def show_event_participants(callback: CallbackQuery, state: FSMContext):
     event_id = int(callback.data.split(CB_EVENT_PARTICIPANTS, 1)[1])
@@ -1325,6 +1407,15 @@ async def back_to_profile(callback: CallbackQuery, state: FSMContext):
     
     user_events = await db.get_user_created_events(callback.from_user.id)
     is_creator = len(user_events) > 0
+    # Показываем баланс инициатора
+    creator_db_id = await db.get_user_id(callback.from_user.id)
+    initiator_balance = 0.0
+    if creator_db_id:
+        initiator_balance = await db.get_initiator_balance(creator_db_id)
+
+    profile_earnings = PROFILE_EARNINGS.format(initiator_balance=round(initiator_balance, 2))
+    profile_text = profile_text + "\n\n" + profile_earnings
+
     
     await state.set_state(ProfileStates.VIEWING)
     await callback.message.edit_text(

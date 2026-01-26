@@ -99,7 +99,8 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="🔙 Назад к списку", callback_data=CB_ADMIN_EVENTS)],
-                [InlineKeyboardButton(text="🏠 В админку", callback_data=CB_ADMIN_MENU)]
+                [InlineKeyboardButton(text="🏠 В админку", callback_data=CB_ADMIN_MENU)],
+                [InlineKeyboardButton(text="✅ Пометить как проведённое", callback_data=f"admin:complete_event:{event_id}")]
             ]
         )
     
@@ -278,6 +279,58 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
             reply_markup=get_admin_event_detail_kb(event_id)
         )
         await callback.answer()
+
+    @admin_router.callback_query(F.data.startswith("admin:complete_event:"))
+    async def admin_complete_event_handler(callback: CallbackQuery, state: FSMContext):
+        """Пометить событие как проведённое и начислить инициатору 33%."""
+        if not await check_admin_access(callback.from_user.id):
+            await callback.answer(ADMIN_NO_ACCESS)
+            return
+
+        try:
+            event_id = int(callback.data.split("admin:complete_event:", 1)[1])
+        except Exception:
+            await callback.answer("❌ Неверный ID события")
+            return
+
+        # Обновляем статус события на COMPLETED
+        try:
+            async with aiosqlite.connect(db.db_path) as conn:
+                await conn.execute("UPDATE events SET status = 'COMPLETED' WHERE id = ?", (event_id,))
+                await conn.commit()
+        except Exception as e:
+            logging.error(f"Failed to mark event {event_id} completed: {e}")
+            await callback.answer("❌ Ошибка при пометке события")
+            return
+
+        # Вызываем начисление инициатору
+        res = await db.add_initiator_earnings_for_event(event_id, 0.33)
+        if res.get('success'):
+            # уведомляем админа и (если нужно) организатора
+            creator_id = res.get('user_id')
+            share = res.get('share')
+            new_balance = res.get('new_balance')
+            title = res.get('title')
+
+            # notify creator via bot if telegram id known
+            creator_tg = None
+            try:
+                cursor = await db.get_event_full_details(event_id)
+                # get_event_full_details returns creator telegram in column 12
+                creator_tg = cursor[11] if cursor and len(cursor) > 11 else None
+            except Exception:
+                creator_tg = None
+
+            if creator_tg:
+                try:
+                    await callback.bot.send_message(creator_tg, f"Событие '{title}' помечено как проведённое. Тебе начислено {share} ₽. Доступно к выводу: {new_balance} ₽")
+                except Exception as e:
+                    logging.error(f"Failed to notify creator {creator_tg}: {e}")
+
+            await callback.answer("Событие помечено как проведённое и инициатору начислена доля")
+            await callback.message.edit_text("Событие помечено как проведённое и начисления выполнены.", reply_markup=get_admin_event_detail_kb(event_id))
+        else:
+            await callback.answer(f"Начисление не выполнено: {res.get('reason')}")
     
     @admin_router.callback_query(F.data == CB_ADMIN_BOOKINGS)
     async def admin_bookings_handler(callback: CallbackQuery, state: FSMContext):
@@ -332,6 +385,84 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
             reply_markup=get_admin_bookings_kb(bookings, page, total_pages)
         )
         await callback.answer()
+
+    @admin_router.callback_query(F.data == "withdraw:list")
+    async def admin_withdraw_list(callback: CallbackQuery, state: FSMContext):
+        if not await check_admin_access(callback.from_user.id):
+            await callback.answer(ADMIN_NO_ACCESS)
+            return
+
+        rows = await db.list_withdrawal_requests(status='pending')
+        if not rows:
+            await callback.message.answer("Нет заявок на вывод.")
+            await callback.answer()
+            return
+
+        for r in rows:
+            user_display = r['user_id']
+            text = f"#{r['id']} Пользователь: {user_display}\nСумма: {r['amount']} ₽\nРеквизиты: {r['contact']}"
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Выполнить", callback_data=f"withdraw:process:{r['id']}"), InlineKeyboardButton(text="Отклонить", callback_data=f"withdraw:reject:{r['id']}")]
+            ])
+            await callback.message.answer(text, reply_markup=kb)
+
+        await callback.answer()
+
+    @admin_router.callback_query(F.data.startswith("withdraw:process:"))
+    async def admin_withdraw_process(callback: CallbackQuery, state: FSMContext):
+        if not await check_admin_access(callback.from_user.id):
+            await callback.answer(ADMIN_NO_ACCESS)
+            return
+
+        try:
+            req_id = int(callback.data.split("withdraw:process:",1)[1])
+        except Exception:
+            await callback.answer("Неверный ID заявки")
+            return
+
+        ok = await db.mark_withdrawal_processed(req_id, callback.from_user.id, admin_comment=None)
+        if not ok:
+            await callback.answer("Не удалось обработать заявку (возможно недостаточно средств или заявка уже обработана)")
+            return
+
+        # уведомляем пользователя
+        # получаем данные заявки
+        rows = await db.list_withdrawal_requests()
+        req = next((x for x in rows if x['id']==req_id), None)
+        if req:
+            try:
+                await callback.bot.send_message(req['user_id'], WITHDRAW_PROCESSED_USER.format(id=req_id, amount=req['amount']))
+            except Exception:
+                pass
+
+        await callback.answer("Заявка отмечена как выполненная")
+
+    @admin_router.callback_query(F.data.startswith("withdraw:reject:"))
+    async def admin_withdraw_reject(callback: CallbackQuery, state: FSMContext):
+        if not await check_admin_access(callback.from_user.id):
+            await callback.answer(ADMIN_NO_ACCESS)
+            return
+
+        try:
+            req_id = int(callback.data.split("withdraw:reject:",1)[1])
+        except Exception:
+            await callback.answer("Неверный ID заявки")
+            return
+
+        ok = await db.reject_withdrawal(req_id, admin_comment=f"Отклонено админом {callback.from_user.id}")
+        if not ok:
+            await callback.answer("Не удалось отклонить заявку")
+            return
+
+        rows = await db.list_withdrawal_requests()
+        req = next((x for x in rows if x['id']==req_id), None)
+        if req:
+            try:
+                await callback.bot.send_message(req['user_id'], WITHDRAW_REJECTED_USER.format(id=req_id, comment="Отклонено админом"))
+            except Exception:
+                pass
+
+        await callback.answer("Заявка отклонена")
     
     @admin_router.callback_query(F.data.startswith("admin:booking_info:"))
     async def booking_info_handler(callback: CallbackQuery, state: FSMContext):
