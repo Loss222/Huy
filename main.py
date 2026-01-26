@@ -81,6 +81,31 @@ async def notify_event_participants(event_id: int, new_participant_data: dict):
     except Exception as e:
         logging.error(f"Failed to send participant notifications: {e}")
 
+
+async def notify_event_cancellation(event_id: int, cancelled_by_telegram_id: int):
+    """Уведомить всех подтверждённых участников (кроме отменившего) о том, что событие отменено."""
+    try:
+        event = await db.get_event_details(event_id)
+        if not event:
+            return
+
+        event_type = event[1] or event[0]
+        date = event[3]
+        time = event[4]
+
+        participants = await db.get_all_confirmed_participants(event_id, exclude_telegram_id=cancelled_by_telegram_id)
+        for p in participants:
+            try:
+                participant_tg, username, name = p
+                await bot.send_message(
+                    participant_tg,
+                    f"❌ Событие отменено\n\n🎯 {event_type}\n📅 {date} {time}\n\nОрганизатор отменил событие."
+                )
+            except Exception as e:
+                logging.error(f"Failed to notify participant {p} about cancellation: {e}")
+    except Exception as e:
+        logging.error(f"Failed to run cancellation notifications for event {event_id}: {e}")
+
 async def handle_full_event(event_id: int):
     """
     Обработка полного события
@@ -1058,6 +1083,9 @@ async def confirm_cancel(callback: CallbackQuery):
     if not success:
         await callback.answer("Это событие нельзя отменить.", show_alert=True)
         return
+
+    # Уведомляем участников (кроме инициатора)
+    await notify_event_cancellation(event_id, callback.from_user.id)
 
     # Получаем обновлённые детали и показываем статус отмены
     event = await db.get_event_details(event_id)
