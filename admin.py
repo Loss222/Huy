@@ -314,7 +314,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
             user_display = f"@{username}" if username else user_name or f"ID:{telegram_id}"
             
             bookings_list_text += (
-                f"{i}. <b>{date_str}</b>\n"
+                f"{i}. {date_str}\n"
                 f"   👤 {user_display}\n"
                 f"   🎯 {event_type} ({city})\n"
                 f"   📅 {event_datetime}\n\n"
@@ -396,7 +396,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         
         if not bookings:
             await callback.message.edit_text(
-                f"🎟 <b>Список бронирований</b>\n\nНа странице {page+1}/{total_pages} нет бронирований.",
+                f"🎟 Список бронирований\n\nНа странице {page+1}/{total_pages} нет бронирований.",
                 reply_markup=get_admin_main_kb()
             )
             await callback.answer()
@@ -410,7 +410,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
             user_display = f"@{username}" if username else user_name or f"ID:{telegram_id}"
             
             bookings_list_text += (
-                f"{i}. <b>{date_str}</b>\n"
+                f"{i}. {date_str}\n"
                 f"   👤 {user_display}\n"
                 f"   🎯 {event_type} ({city})\n"
                 f"   📅 {event_datetime}\n\n"
