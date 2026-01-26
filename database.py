@@ -509,3 +509,41 @@ class Database:
         except Exception as e:
             logging.error(f"Error cancelling booking for user {user_telegram_id}, event {event_id}: {e}")
             return False
+
+    async def cancel_event(self, event_id: int, user_telegram_id: int) -> bool:
+        """
+        Отметить событие как отменённое (status = 'CANCELED').
+
+        Метод проверяет, что запрашивающий пользователь является создателем события.
+        Не удаляет запись, только обновляет статус.
+        """
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                user_id = await self.get_user_id(user_telegram_id)
+                if not user_id:
+                    return False
+
+                cursor = await db.execute(
+                    "SELECT creator_id, status FROM events WHERE id = ?",
+                    (event_id,)
+                )
+                row = await cursor.fetchone()
+                if not row:
+                    return False
+
+                creator_id, status = row
+                if creator_id != user_id:
+                    return False
+
+                if status != 'ACTIVE':
+                    return False
+
+                await db.execute(
+                    "UPDATE events SET status = 'CANCELED' WHERE id = ?",
+                    (event_id,)
+                )
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error cancelling event {event_id} by user {user_telegram_id}: {e}")
+            return False

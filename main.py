@@ -961,6 +961,125 @@ async def invite_friend(callback: CallbackQuery):
     )
     await callback.answer()
 
+
+# ----- Отмена события (инициатор) -----
+@router.callback_query(F.data.startswith("cancel_event:"))
+async def cancel_event_start(callback: CallbackQuery):
+    """Показывает подтверждение отмены события инициатору."""
+    try:
+        event_id = int(callback.data.split("cancel_event:", 1)[1])
+    except Exception:
+        await callback.answer("Это событие нельзя отменить.", show_alert=True)
+        return
+
+    event = await db.get_event_details(event_id)
+    if not event:
+        await callback.answer("Это событие нельзя отменить.", show_alert=True)
+        return
+
+    # event tuple: type, custom_type, city, date, time, max_participants, description, contact, status, creator_id, ...
+    status = event[8]
+    creator_id = event[9]
+
+    # Проверка прав: только создатель (по user id) может отменять
+    user_id = await db.get_user_id(callback.from_user.id)
+    if not user_id or user_id != creator_id or status != 'ACTIVE':
+        await callback.answer("Это событие нельзя отменить.", show_alert=True)
+        return
+
+    # Показываем подтверждение (не меняем FSM)
+    confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, отменить", callback_data=f"confirm_cancel:{event_id}"),
+         InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back_to_event:{event_id}")]
+    ])
+
+    await callback.message.edit_text(
+        "Ты точно хочешь отменить событие?\nУчастники больше не смогут записаться.",
+        reply_markup=confirm_kb
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("back_to_event:"))
+async def back_to_event(callback: CallbackQuery):
+    """Возврат к деталям/управлению своего события (не трогаем FSM)."""
+    try:
+        event_id = int(callback.data.split("back_to_event:", 1)[1])
+    except Exception:
+        await callback.answer("Ошибка навигации", show_alert=False)
+        return
+
+    event = await db.get_event_details(event_id)
+    if not event:
+        await callback.answer("Это событие нельзя просмотреть.", show_alert=True)
+        return
+
+    (event_type, custom_type, city, date, time, max_participants,
+     description, contact, status, creator_id) = event[:10]
+
+    display_type = custom_type or event_type
+
+    # Формируем текст управления событием (показываем статус)
+    status_text = '✅ Активно' if status == 'ACTIVE' else '❌ Отменено'
+    bottom_text = ""
+
+    text = EVENT_MANAGEMENT_DETAILS.format(
+        event_type=display_type,
+        city=city,
+        date=date,
+        time=time,
+        status=status_text,
+        confirmed_count=await db.get_event_participants_count(event_id),
+        max_participants=max_participants,
+        contact=contact,
+        description=description,
+        bottom_text=bottom_text
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад к моим событиям", callback_data=CB_NAV_BACK_TO_MY_EVENTS)]
+        ])
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("confirm_cancel:"))
+async def confirm_cancel(callback: CallbackQuery):
+    """Подтверждение отмены — обновляем статус в базе без удаления и без изменения FSM."""
+    try:
+        event_id = int(callback.data.split("confirm_cancel:", 1)[1])
+    except Exception:
+        await callback.answer("Это событие нельзя отменить.", show_alert=True)
+        return
+
+    success = await db.cancel_event(event_id, callback.from_user.id)
+    if not success:
+        await callback.answer("Это событие нельзя отменить.", show_alert=True)
+        return
+
+    # Получаем обновлённые детали и показываем статус отмены
+    event = await db.get_event_details(event_id)
+    if not event:
+        await callback.answer("Это событие нельзя показать.", show_alert=True)
+        return
+
+    (event_type, custom_type, city, date, time, max_participants,
+     description, contact, status, creator_id) = event[:10]
+
+    display_type = custom_type or event_type
+
+    text = f"Событие отменено ❌\n\n🎯 {display_type}\n🏙 {city}\n📅 {date} {time}\n\nСтатус: ❌ Отменено"
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад к моим событиям", callback_data=CB_NAV_BACK_TO_MY_EVENTS)]
+        ])
+    )
+    await callback.answer()
+
 @router.callback_query(F.data == CB_PROFILE_MY_BOOKINGS)
 async def show_my_bookings(callback: CallbackQuery, state: FSMContext):
     bookings = await db.get_user_bookings(callback.from_user.id)

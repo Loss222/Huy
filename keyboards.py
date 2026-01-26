@@ -182,16 +182,28 @@ def get_my_events_kb(events):
     buttons = []
     for event in events:
         event_id, event_type, city, date_time, status, participants_count, max_participants = event
-        
         status_emoji = "✅" if status == 'ACTIVE' else "❌"
         text = f"{status_emoji} {event_type[:15]} • {city} • {participants_count}/{max_participants}"
-        
-        buttons.append([
+
+        # Основная кнопка — переход к деталям события (существующий callback не меняем)
+        row = [
             InlineKeyboardButton(
                 text=text,
                 callback_data=f"{CB_EVENT_MY}{event_id}"
             )
-        ])
+        ]
+
+        # Если событие активно и это список создаваемых пользователем событий,
+        # показываем дополнительную кнопку для отмены события.
+        if status == 'ACTIVE':
+            row.append(
+                InlineKeyboardButton(
+                    text="❌ Отменить событие",
+                    callback_data=f"cancel_event:{event_id}"
+                )
+            )
+
+        buttons.append(row)
     
     buttons.append([InlineKeyboardButton(text=BTN_BACK, callback_data=CB_NAV_BACK_TO_PROFILE)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
