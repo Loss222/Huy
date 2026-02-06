@@ -1035,7 +1035,18 @@ async def view_event_details(callback: CallbackQuery, state: FSMContext):
      creator_name, confirmed_count) = event
     
     display_type = custom_type or event_type
-    
+
+    # Сохраняем контекст возврата в FSM, если он есть (premium flow)
+    data = await state.get_data()
+    if data.get('events_ids'):
+        # Если пользователь пришёл из премиум-потока — сохраняем контекст
+        await state.update_data(return_context={
+            'city': data.get('search_city'),
+            'current_index': data.get('current_index', 0),
+            'sort': 'confirmed_desc',
+            'source': 'premium_events_list'
+        })
+
     await state.set_state(MainStates.VIEWING_EVENT)
     await state.update_data(current_event_id=event_id)
     
@@ -1059,6 +1070,49 @@ async def view_event_details(callback: CallbackQuery, state: FSMContext):
         text, 
         reply_markup=get_event_details_kb(event_id, callback.from_user.id, is_confirmed)
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_BACK_TO_EVENTS)
+async def back_to_events_list(callback: CallbackQuery, state: FSMContext):
+    """Возврат к премиум-списку событий по сохранённому в FSM контексту.
+    Если контекста нет — показываем экран выбора города (fallback)."""
+    data = await state.get_data()
+    ctx = data.get('return_context')
+
+    if ctx and ctx.get('source') == 'premium_events_list' and ctx.get('city'):
+        city = ctx.get('city')
+        current_index = int(ctx.get('current_index', 0))
+
+        events = await db.get_events_by_city(city)
+        events_sorted = sorted(events, key=lambda e: e[4] or 0, reverse=True)
+        if not events_sorted:
+            # Нет событий в городе — вернём на выбор города
+            await state.set_state(SearchEventsStates.CHOOSE_CITY)
+            await callback.message.edit_text("📍 В каком городе ищем события?", reply_markup=get_search_city_choice_kb(city))
+            await callback.answer()
+            return
+
+        events_ids = [e[0] for e in events_sorted]
+        # Нормализуем индекс
+        if current_index < 0 or current_index >= len(events_ids):
+            current_index = 0
+
+        await state.update_data(events_ids=events_ids, current_index=current_index, search_city=city)
+        await state.set_state(SearchEventsStates.SELECT_EVENT)
+
+        event_id = events_ids[current_index]
+        event_full = await db.get_event_full_details(event_id)
+        text = render_premium_card_text(event_full)
+        kb = get_premium_event_kb(event_id, current_index, len(events_ids), callback.from_user.id, await db.is_user_confirmed(event_id, callback.from_user.id), urllib.parse.quote_plus(city))
+
+        await callback.message.edit_text(text, reply_markup=kb)
+        await callback.answer()
+        return
+
+    # Фоллбек: показываем выбор города
+    await state.set_state(SearchEventsStates.CHOOSE_CITY)
+    await callback.message.edit_text("📍 В каком городе ищем события?", reply_markup=get_search_city_choice_kb())
     await callback.answer()
 
 @router.callback_query(F.data.startswith(CB_EVENT_JOIN))

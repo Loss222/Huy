@@ -43,6 +43,7 @@ CB_NAV_BACK_TO_MY_EVENTS = "nav:back_to_my_events"
 CB_NAV_BACK_TO_SEARCH = "nav:back_to_search"
 CB_NAV_BACK_TO_MY_BOOKINGS = "nav:back_to_my_bookings"
 CB_USER_INFO = "user:info:"
+CB_BACK_TO_EVENTS = "event:back_to_list"
 
 # === ОБЩИЕ КЛАВИАТУРЫ ===
 def get_main_menu_kb(telegram_id, admin_ids):
@@ -189,7 +190,8 @@ def get_event_details_kb(event_id, user_telegram_id, is_confirmed=False):
     buttons.append([
         InlineKeyboardButton(text="📲 Пригласить друга", callback_data=f"{CB_EVENT_INVITE}{event_id}:{user_telegram_id}")
     ])
-    buttons.append([InlineKeyboardButton(text=BTN_BACK, callback_data=CB_NAV_BACK_TO_SEARCH)])
+    # Возврат к премиум-списку событий (использует FSM return_context)
+    buttons.append([InlineKeyboardButton(text=BTN_BACK, callback_data=CB_BACK_TO_EVENTS)])
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
