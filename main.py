@@ -1186,6 +1186,24 @@ async def back_to_events_list(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             return
 
+
+        @router.callback_query(F.data == CB_ONBOARDING_CANCEL, StateFilter(CreateEventStates.TYPE_SELECT))
+        async def create_flow_cancel(callback: CallbackQuery, state: FSMContext):
+            """Отмена выбора типа при создании события (inline-кнопка)"""
+            # Очистим сессию создания и вернём в главное меню
+            await state.clear()
+            await state.set_state(MainStates.MAIN_MENU)
+            try:
+                await callback.message.edit_text(BACK_TO_MAIN)
+            except Exception:
+                pass
+            await callback.message.answer(
+                "Выберите действие:",
+                reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS)
+            )
+            await callback.answer()
+            return
+
         events_ids = [e[0] for e in events_sorted]
         # Нормализуем индекс
         if current_index < 0 or current_index >= len(events_ids):
