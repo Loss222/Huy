@@ -141,8 +141,8 @@ def get_event_types_kb():
     """Выбор типа события"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🎉 Туса"), KeyboardButton(text="🎳 Страйкбол")],
-            [KeyboardButton(text="🔫 Пейнтбол"), KeyboardButton(text="🎯 Другое")],
+            [KeyboardButton(text="🎉 Туса\nВечеринка / тусовка"), KeyboardButton(text="🎳 Страйкбол\nКомандная игра")],
+            [KeyboardButton(text="🔫 Пейнтбол\nКомандная стрельба"), KeyboardButton(text="🎯 Другое\nВвести свой тип")],
             [KeyboardButton(text=BTN_BACK), KeyboardButton(text=BTN_CANCEL)]
         ],
         resize_keyboard=True
