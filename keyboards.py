@@ -139,14 +139,27 @@ def get_cities_keyboard(page=0, items_per_page=8):
 # === КЛАВИАТУРЫ СОЗДАНИЯ СОБЫТИЯ ===
 def get_event_types_kb():
     """Выбор типа события"""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🎉 Туса\nВечеринка / тусовка"), KeyboardButton(text="🎳 Страйкбол\nКомандная игра")],
-            [KeyboardButton(text="🔫 Пейнтбол\nКомандная стрельба"), KeyboardButton(text="🎯 Другое\nВвести свой тип")],
-            [KeyboardButton(text=BTN_BACK), KeyboardButton(text=BTN_CANCEL)]
-        ],
-        resize_keyboard=True
-    )
+    items = [
+        KeyboardButton(text="🎉 Туса"),
+        KeyboardButton(text="🎳 Страйкбол"),
+        KeyboardButton(text="🔫 Пейнтбол"),
+        KeyboardButton(text="🎯 Другое")
+    ]
+
+    keyboard = []
+    row = []
+    for btn in items:
+        row.append(btn)
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    # Последняя строка с навигацией
+    keyboard.append([KeyboardButton(text=BTN_BACK), KeyboardButton(text=BTN_CANCEL)])
+
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
 # === КЛАВИАТУРЫ НОВОГО ПОТОКА СОЗДАНИЯ ===
@@ -167,12 +180,18 @@ def get_types_kb_for_format(format_key: str):
     types = TYPE_MAPPING.get(format_key, [])
     rows = []
     seen = set()
+    temp_row = []
     for slug, disp in types:
         cb = f"{CB_CREATE_TYPE}{slug}"
         if cb in seen:
             continue
         seen.add(cb)
-        rows.append([InlineKeyboardButton(text=disp, callback_data=cb)])
+        temp_row.append(InlineKeyboardButton(text=disp, callback_data=cb))
+        if len(temp_row) == 2:
+            rows.append(temp_row)
+            temp_row = []
+    if temp_row:
+        rows.append(temp_row)
 
     # Кнопка назад к выбору формата
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{CB_CREATE_FORMAT}BACK")])
