@@ -331,6 +331,28 @@ async def cancel_anywhere(message: Message, state: FSMContext):
         reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
     )
 
+
+# Специфичные быстрые обработчики 'Отмена' для потоков создания (чтобы точно отвечать быстро)
+@router.message(F.text == BTN_CANCEL, StateFilter(CreateEventStates.FORMAT))
+async def cancel_create_format(message: Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(MainStates.MAIN_MENU)
+    await message.answer(CANCELLED_ACTION, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS))
+
+
+@router.message(F.text == BTN_CANCEL, StateFilter(CreateEventStates.TYPE_SELECT))
+async def cancel_create_type_select(message: Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(MainStates.MAIN_MENU)
+    await message.answer(CANCELLED_ACTION, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS))
+
+
+@router.message(F.text == BTN_CANCEL, StateFilter(CreateEventStates.TYPE_OTHER))
+async def cancel_create_type_other(message: Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(MainStates.MAIN_MENU)
+    await message.answer(CANCELLED_ACTION, reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS))
+
 @router.message(F.text == BTN_BACK)
 async def go_back(message: Message, state: FSMContext):
     current_state = await state.get_state()
