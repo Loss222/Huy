@@ -156,8 +156,8 @@ def get_event_types_kb():
     if row:
         keyboard.append(row)
 
-    # Последняя строка с навигацией
-    keyboard.append([KeyboardButton(text=BTN_BACK), KeyboardButton(text=BTN_CANCEL)])
+    # Последняя строка с навигацией (без кнопки Отмена чтобы избежать зависаний)
+    keyboard.append([KeyboardButton(text=BTN_BACK)])
 
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -195,8 +195,6 @@ def get_types_kb_for_format(format_key: str):
 
     # Кнопка назад к выбору формата
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{CB_CREATE_FORMAT}BACK")])
-    # Отмена — в главное меню
-    rows.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data=CB_ONBOARDING_CANCEL)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def get_confirm_kb():
