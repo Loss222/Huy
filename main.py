@@ -811,6 +811,25 @@ async def search_choose_city(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == CB_ONBOARDING_CANCEL)
+async def search_cancel_city(callback: CallbackQuery, state: FSMContext):
+    """Обработка нажатия 'Отмена' в экранe выбора города при поиске — возврат в главное меню."""
+    current_state = await state.get_state()
+    if current_state == SearchEventsStates.CHOOSE_CITY.state:
+        await state.clear()
+        await state.set_state(MainStates.MAIN_MENU)
+        try:
+            await callback.message.edit_text(BACK_TO_MAIN)
+        except Exception:
+            pass
+        await callback.message.answer(
+            "Выберите действие:",
+            reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS)
+        )
+        await callback.answer()
+        return
+
+
 @router.callback_query(F.data.startswith(CB_CITY_PAGE))
 async def search_city_page(callback: CallbackQuery, state: FSMContext):
     # пагинация списка городов в режиме выбора города для поиска
