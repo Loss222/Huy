@@ -1204,6 +1204,55 @@ async def back_to_events_list(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             return
 
+
+        @router.callback_query(F.data == CB_ONBOARDING_CANCEL)
+        async def global_onboarding_cancel(callback: CallbackQuery, state: FSMContext):
+            """Глобальная обработка inline-отмены: отвечаем сразу, затем делегируем по состоянию.
+            Если текущая сессия — создание события или поиск — обработаем тут и вернём в главное меню.
+            Для онбординга позволим локальному роутеру обработать дальше (он проверяет состояние).
+            """
+            # Отвечаем немедленно, чтобы убрать спиннер у пользователя
+            try:
+                await callback.answer()
+            except Exception:
+                pass
+
+            current_state = await state.get_state() or ''
+            # Если это онбординг — ничего не делаем, онбординг-роутер обработает.
+            if OnboardingStates.NAME.state in current_state or OnboardingStates.CITY.state in current_state:
+                return
+
+            # Если мы в потоке создания или выборе типа — очистим FSM и вернём в главное меню
+            if CreateEventStates.FORMAT.state in current_state or CreateEventStates.TYPE_SELECT.state in current_state or CreateEventStates.TYPE_OTHER.state in current_state or CreateEventStates.TYPE.state in current_state:
+                await state.clear()
+                await state.set_state(MainStates.MAIN_MENU)
+                try:
+                    await callback.message.edit_text(BACK_TO_MAIN)
+                except Exception:
+                    pass
+                await callback.message.answer(
+                    "Выберите действие:",
+                    reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS)
+                )
+                return
+
+            # Если мы в выборе города для поиска — вернём в главное меню
+            if SearchEventsStates.CHOOSE_CITY.state in current_state:
+                await state.clear()
+                await state.set_state(MainStates.MAIN_MENU)
+                try:
+                    await callback.message.edit_text(BACK_TO_MAIN)
+                except Exception:
+                    pass
+                await callback.message.answer(
+                    "Выберите действие:",
+                    reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS)
+                )
+                return
+
+            # По-умолчанию ничего не делаем — локальные роутеры могут перехватить
+            return
+
         events_ids = [e[0] for e in events_sorted]
         # Нормализуем индекс
         if current_index < 0 or current_index >= len(events_ids):
