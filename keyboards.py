@@ -44,6 +44,8 @@ CB_NAV_BACK_TO_SEARCH = "nav:back_to_search"
 CB_NAV_BACK_TO_MY_BOOKINGS = "nav:back_to_my_bookings"
 CB_USER_INFO = "user:info:"
 CB_BACK_TO_EVENTS = "event:back_to_list"
+CB_CREATE_FORMAT = "create:format:"
+CB_CREATE_TYPE = "create:type:"
 
 # === ОБЩИЕ КЛАВИАТУРЫ ===
 def get_main_menu_kb(telegram_id, admin_ids):
@@ -117,6 +119,52 @@ def get_event_types_kb():
         ],
         resize_keyboard=True
     )
+
+
+# === КЛАВИАТУРЫ НОВОГО ПОТОКА СОЗДАНИЯ ===
+def get_create_format_kb():
+    """Inline keyboard выбора формата (категории) события"""
+    buttons = [
+        [InlineKeyboardButton(text="🏃‍♂️ Активные игры", callback_data=f"{CB_CREATE_FORMAT}active_games")],
+        [InlineKeyboardButton(text="🎉 Вечеринки и тусовки", callback_data=f"{CB_CREATE_FORMAT}parties")],
+        [InlineKeyboardButton(text="🎮 Киберспорт и турниры", callback_data=f"{CB_CREATE_FORMAT}esports")],
+        [InlineKeyboardButton(text="📚 Другое", callback_data=f"{CB_CREATE_FORMAT}other")],
+        [InlineKeyboardButton(text=BTN_BACK, callback_data=CB_NAV_BACK_TO_MAIN)]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_types_kb_for_format(format_key: str):
+    """Возвращает inline-клавиатуру типов для заданной категории format_key."""
+    mapping = {
+        'active_games': [
+            "Пейнтбол", "Страйкбол", "Лазертаг", "Футбол", "Баскетбол",
+            "Волейбол", "Боулинг", "Картинг", "Квест (офлайн)", "Другое активное"
+        ],
+        'parties': [
+            "Вечеринка", "День рождения", "Бар", "Клуб", "Караоке", "Концерт / лайв",
+            "Фестиваль", "Тематическая тусовка", "Meetup / встреча", "Другое событие"
+        ],
+        'esports': [
+            "PUBG Mobile", "Mobile Legends", "CS2 / Valorant", "Dota 2", "FIFA / EA FC",
+            "Fortnite", "Warzone", "Другое (турнир)"
+        ],
+        'other': [
+            "Лекция", "Мастер-класс", "Презентация", "Совместная поездка", "Прогулка", "Нетворкинг", "Другое"
+        ]
+    }
+
+    types = mapping.get(format_key, [])
+    rows = []
+    import urllib.parse
+    for t in types:
+        rows.append([InlineKeyboardButton(text=t, callback_data=f"{CB_CREATE_TYPE}{format_key}:{urllib.parse.quote_plus(t)}")])
+
+    # Кнопка назад к выбору формата
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{CB_CREATE_FORMAT}BACK")])
+    # Отмена — в главное меню
+    rows.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data=CB_ONBOARDING_CANCEL)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def get_confirm_kb():
     """Подтверждение создания события"""

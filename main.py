@@ -415,10 +415,12 @@ async def start_create_event(message: Message, state: FSMContext):
         return
     
     await state.update_data(city=city)
-    # Переводим пользователя в шаг 1 создания события.
-    await state.set_state(CreateEventStates.step_1)
-    # Большой вводный текст отправляется только в обработчике CreateEventStates.step_1
-    await send_create_intro(message, state)
+    # Новый поток: сначала выбираем формат (категорию) события
+    await state.set_state(CreateEventStates.FORMAT)
+    await message.answer(
+        "Какой формат события ты хочешь создать?\nВыбери категорию — мы подстроим сценарий под неё.",
+        reply_markup=get_create_format_kb()
+    )
 
 
 async def send_create_intro(message: Message, state: FSMContext):
@@ -497,6 +499,64 @@ async def process_event_type_other(message: Message, state: FSMContext):
             "Упс — что-то пошло не так. Попробуй ещё раз, пожалуйста.",
             reply_markup=get_back_cancel_kb()
         )
+
+
+@router.callback_query(F.data.startswith(CB_CREATE_FORMAT))
+async def create_format_choice(callback: CallbackQuery, state: FSMContext):
+    # payload может быть format_key или BACK
+    payload = callback.data.split(CB_CREATE_FORMAT, 1)[1]
+    if payload == 'BACK':
+        await callback.message.edit_text(
+            "Какой формат события ты хочешь создать?\nВыбери категорию — мы подстроим сценарий под неё.",
+            reply_markup=get_create_format_kb()
+        )
+        await callback.answer()
+        return
+
+    format_key = payload
+    display_map = {
+        'active_games': 'Активные игры',
+        'parties': 'Вечеринки и тусовки',
+        'esports': 'Киберспорт и турниры',
+        'other': 'Другое'
+    }
+    display = display_map.get(format_key, format_key)
+
+    # Сохраняем выбранный формат и показываем типы
+    await state.update_data(format=display)
+    await state.set_state(CreateEventStates.TYPE_SELECT)
+    await callback.message.edit_text(f"{display}: выбери тип события", reply_markup=get_types_kb_for_format(format_key))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_CREATE_TYPE))
+async def create_type_choice(callback: CallbackQuery, state: FSMContext):
+    try:
+        rest = callback.data.split(CB_CREATE_TYPE, 1)[1]
+        format_key, t_enc = rest.split(':', 1)
+        import urllib.parse
+        type_text = urllib.parse.unquote_plus(t_enc)
+    except Exception:
+        await callback.answer()
+        return
+
+    # Получаем формат display
+    data = await state.get_data()
+    format_display = data.get('format') or ''
+
+    # Если пользователь выбрал "Другое" — переводим в текстовый ввод для типа
+    if 'Другое' in type_text or type_text.lower().startswith('другое'):
+        await state.update_data(type=None)
+        await state.set_state(CreateEventStates.TYPE_OTHER)
+        await callback.message.edit_text("Напиши, пожалуйста, какой тип события (коротко):", reply_markup=get_back_cancel_kb())
+        await callback.answer()
+        return
+
+    # Иначе — сохраняем тип и продолжаем стандартный сценарий (дата)
+    await state.update_data(type=type_text, custom_type=None, format=format_display)
+    await state.set_state(CreateEventStates.DATE)
+    await callback.message.edit_text(CREATE_EVENT_DATE.format(event_type=type_text), reply_markup=get_back_cancel_kb())
+    await callback.answer()
 
 
 @router.message(CreateEventStates.DATE)
@@ -702,8 +762,19 @@ async def process_confirmation(message: Message, state: FSMContext):
     if message.text == BTN_CONFIRM:
         try:
             data = await state.get_data()
-            
-            event_id = await db.create_event(data, message.from_user.id)
+            # Подготовим полезную структуру для БД: сохраняем формат и тип в полях events.type/custom_type
+            event_payload = data.copy()
+            chosen_type = data.get('custom_type') or data.get('type')
+            fmt = data.get('format')
+            if fmt:
+                # Сохраняем формат в поле type, а в custom_type кладём комбинированную строку
+                event_payload['type'] = fmt
+                if chosen_type:
+                    event_payload['custom_type'] = f"{fmt} • {chosen_type}"
+                else:
+                    event_payload['custom_type'] = None
+
+            event_id = await db.create_event(event_payload, message.from_user.id)
             
             if not event_id:
                 await message.answer(

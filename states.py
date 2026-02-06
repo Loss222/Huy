@@ -20,6 +20,8 @@ class CreateEventStates(StatesGroup):
     DESCRIPTION = State()
     CONTACT = State()
     CONFIRMATION = State()
+    FORMAT = State()
+    TYPE_SELECT = State()
 
 # === СОСТОЯНИЯ ПОИСКА СОБЫТИЙ ===
 class SearchEventsStates(StatesGroup):
