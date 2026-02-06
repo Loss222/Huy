@@ -42,3 +42,14 @@ class ProfileStates(StatesGroup):
 class OnboardingStates(StatesGroup):
     NAME = State()
     CITY = State()
+
+
+# === СОСТОЯНИЯ ТУРНИРОВ ===
+class TournamentStates(StatesGroup):
+    STEP_TYPE = State()
+    STEP_MODE = State()
+    STEP_REG_LINK = State()
+    STEP_DATE = State()
+    STEP_MAX_PARTICIPANTS = State()
+    STEP_DESCRIPTION = State()
+    STEP_CONFIRM = State()

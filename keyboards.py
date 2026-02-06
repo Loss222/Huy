@@ -47,6 +47,12 @@ CB_BACK_TO_EVENTS = "event:back_to_list"
 CB_CREATE_FORMAT = "cat:"
 CB_CREATE_TYPE = "type:"
 
+# Tournament callbacks
+CB_TOURN_TYPE = "tournament:type:"
+CB_TOURN_MODE = "tournament:mode:"
+CB_TOURN_CONFIRM = "tournament:confirm"
+CB_NAV_BACK = "nav:back"
+
 # Mapping of type slugs to display names per format
 TYPE_MAPPING = {
     'active': [
@@ -173,6 +179,46 @@ def get_create_format_kb():
         [InlineKeyboardButton(text=BTN_BACK, callback_data=CB_NAV_BACK_TO_MAIN)]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_tournament_types_kb():
+    """Inline keyboard выбора типа турнира (без эмодзи)."""
+    types = [
+        ('pubg_mobile', 'PUBG Mobile'),
+        ('mobile_legends', 'Mobile Legends'),
+        ('cs2', 'CS2'),
+        ('dota2', 'Dota 2'),
+        ('fifa', 'FIFA'),
+        ('other', 'Другое')
+    ]
+    rows = []
+    temp = []
+    for slug, label in types:
+        cb = f"{CB_TOURN_TYPE}{slug}"
+        temp.append(InlineKeyboardButton(text=label, callback_data=cb))
+        if len(temp) == 2:
+            rows.append(temp)
+            temp = []
+    if temp:
+        rows.append(temp)
+    # no cancel here, only back to main via existing nav
+    rows.append([InlineKeyboardButton(text="Назад", callback_data=CB_NAV_BACK)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_tournament_mode_kb():
+    """Inline keyboard выбора режима турнира"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='Онлайн', callback_data=f"{CB_TOURN_MODE}online"), InlineKeyboardButton(text='Оффлайн', callback_data=f"{CB_TOURN_MODE}offline")],
+        [InlineKeyboardButton(text='Назад', callback_data=CB_NAV_BACK)]
+    ])
+
+
+def get_tournament_confirm_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='Подтвердить', callback_data=CB_TOURN_CONFIRM)],
+        [InlineKeyboardButton(text='Назад', callback_data=CB_NAV_BACK)]
+    ])
 
 
 def get_types_kb_for_format(format_key: str):
