@@ -20,6 +20,12 @@ except ImportError:
 # === CALLBACK DATA PREFIXES ===
 CB_CITY_SELECT = "city:select:"
 CB_CITY_PAGE = "city:page:"
+CB_SEARCH_USE_MY_CITY = "search:use_my_city"
+CB_SEARCH_CHOOSE_CITY = "search:choose_city"
+CB_SEARCH_SET_CITY = "search:set_city:"
+CB_EVENT_NAV_PREV = "event:nav:prev:"
+CB_EVENT_NAV_NEXT = "event:nav:next:"
+CB_EVENT_SHOW = "event:show:"
 CB_ONBOARDING_CANCEL = "onboarding:cancel"
 CB_EVENT_VIEW = "event:view:"
 CB_EVENT_JOIN = "event:join:"
@@ -136,6 +142,42 @@ def get_event_list_kb(events):
         ])
     buttons.append([InlineKeyboardButton(text=BTN_BACK, callback_data=CB_NAV_BACK_TO_MAIN)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_search_city_choice_kb(user_city: str = None):
+    """Клавиатура выбора города при поиске событий"""
+    buttons = []
+    row = []
+    # Мой город
+    text_my = "📍 Мой город"
+    buttons.append([InlineKeyboardButton(text=text_my, callback_data=CB_SEARCH_USE_MY_CITY)])
+    # Выбрать другой город
+    buttons.append([InlineKeyboardButton(text="🏙 Выбрать другой город", callback_data=CB_SEARCH_CHOOSE_CITY)])
+    # Отмена/назад
+    buttons.append([InlineKeyboardButton(text=BTN_BACK, callback_data=CB_NAV_BACK_TO_MAIN)])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_premium_event_kb(event_id: int, current_index: int, total: int, user_telegram_id: int, is_confirmed: bool, city_key: str):
+    """Inline keyboard for premium single-event card with navigation."""
+    kb = []
+
+    # Navigation row
+    prev_cb = f"{CB_EVENT_NAV_PREV}{current_index}:{city_key}"
+    next_cb = f"{CB_EVENT_NAV_NEXT}{current_index}:{city_key}"
+    nav_row = []
+    nav_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=prev_cb))
+    nav_row.append(InlineKeyboardButton(text=f"{current_index+1}/{total}", callback_data=f"{CB_EVENT_SHOW}{event_id}"))
+    nav_row.append(InlineKeyboardButton(text="➡️ Вперёд", callback_data=next_cb))
+    kb.append(nav_row)
+
+    # Action row
+    if not is_confirmed:
+        kb.append([InlineKeyboardButton(text="✅ Пойти", callback_data=f"{CB_EVENT_JOIN}{event_id}")])
+
+    kb.append([InlineKeyboardButton(text="🔙 К списку городов", callback_data=CB_SEARCH_CHOOSE_CITY)])
+
+    return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def get_event_details_kb(event_id, user_telegram_id, is_confirmed=False):
     """Детали события"""

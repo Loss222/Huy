@@ -24,6 +24,7 @@ class CreateEventStates(StatesGroup):
 # === СОСТОЯНИЯ ПОИСКА СОБЫТИЙ ===
 class SearchEventsStates(StatesGroup):
     SELECT_EVENT = State()
+    CHOOSE_CITY = State()
 
 # === СОСТОЯНИЯ ПРИСОЕДИНЕНИЯ К СОБЫТИЮ ===
 class JoinEventStates(StatesGroup):

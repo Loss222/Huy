@@ -8,6 +8,7 @@ from aiogram.fsm.state import State, StatesGroup, default_state
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+import urllib.parse
 # Temporary update-logger middleware removed due to aiogram version incompatibility.
 # We'll use lightweight non-intrusive logging handlers further below if needed.
 
@@ -760,26 +761,240 @@ async def start_search(message: Message, state: FSMContext):
     if not onboarded:
         await message.answer("Пожалуйста, сначала пройди онбординг — нажми /start, и всё будет готово.")
         return
-    
-    events = await db.get_events_by_city(city)
-    
-    if not events:
-        await message.answer(
-            SEARCH_NO_EVENTS.format(city=city)
-        )
+    # Показываем экран выбора города для поиска (не меняем profile.city)
+    await state.set_state(SearchEventsStates.CHOOSE_CITY)
+    await message.answer(
+        "📍 В каком городе ищем события?",
+        reply_markup=get_search_city_choice_kb(city)
+    )
+
+
+@router.callback_query(F.data == CB_SEARCH_USE_MY_CITY)
+async def search_use_my_city(callback: CallbackQuery, state: FSMContext):
+    # Используем город из профиля, не меняя профиль
+    name, city, onboarded = await db.get_user_profile(callback.from_user.id)
+    if not city:
+        await callback.answer("В вашем профиле не указан город.", show_alert=True)
         return
-    
+
+    events = await db.get_events_by_city(city)
+    # сортируем по популярности (confirmed_count DESC)
+    events_sorted = sorted(events, key=lambda e: e[4] or 0, reverse=True)
+    if not events_sorted:
+        await callback.message.edit_text(SEARCH_NO_EVENTS.format(city=city))
+        await callback.answer()
+        await state.set_state(MainStates.MAIN_MENU)
+        return
+
+    # Сохраняем список id в FSM
+    events_ids = [e[0] for e in events_sorted]
+    await state.update_data(events_ids=events_ids, current_index=0, search_city=city)
     await state.set_state(SearchEventsStates.SELECT_EVENT)
-    
-    await message.answer(
-        SEARCH_FOUND_EVENTS.format(city=city, count=len(events)),
-        reply_markup=ReplyKeyboardRemove()
+
+    # Показать премиум-карточку первого события
+    first_event = await db.get_event_full_details(events_ids[0])
+    text = render_premium_card_text(first_event)
+    kb = get_premium_event_kb(events_ids[0], 0, len(events_ids), callback.from_user.id, await db.is_user_confirmed(events_ids[0], callback.from_user.id), urllib.parse.quote_plus(city))
+
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_SEARCH_CHOOSE_CITY)
+async def search_choose_city(callback: CallbackQuery, state: FSMContext):
+    # Открываем UI выбора города (повторно используем клавиатуру онбординга)
+    await state.set_state(SearchEventsStates.CHOOSE_CITY)
+    await callback.message.edit_text(
+        "Выберите город:",
+        reply_markup=get_cities_keyboard()
     )
-    
-    await message.answer(
-        SEARCH_EVENTS_LIST,
-        reply_markup=get_event_list_kb(events)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_CITY_PAGE))
+async def search_city_page(callback: CallbackQuery, state: FSMContext):
+    # пагинация списка городов в режиме выбора города для поиска
+    try:
+        page = int(callback.data.split(CB_CITY_PAGE, 1)[1])
+        await callback.message.edit_reply_markup(reply_markup=get_cities_keyboard(page))
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_CITY_SELECT))
+async def search_set_city(callback: CallbackQuery, state: FSMContext):
+    # Выбрали конкретный город в режиме поиска — не записываем в профиль
+    try:
+        city = callback.data.split(CB_CITY_SELECT, 1)[1]
+    except Exception:
+        await callback.answer()
+        return
+
+    events = await db.get_events_by_city(city)
+    events_sorted = sorted(events, key=lambda e: e[4] or 0, reverse=True)
+    if not events_sorted:
+        await callback.message.edit_text(SEARCH_NO_EVENTS.format(city=city))
+        await callback.answer()
+        await state.set_state(MainStates.MAIN_MENU)
+        return
+
+    events_ids = [e[0] for e in events_sorted]
+    await state.update_data(events_ids=events_ids, current_index=0, search_city=city)
+    await state.set_state(SearchEventsStates.SELECT_EVENT)
+
+    first_event = await db.get_event_full_details(events_ids[0])
+    text = render_premium_card_text(first_event)
+    kb = get_premium_event_kb(events_ids[0], 0, len(events_ids), callback.from_user.id, await db.is_user_confirmed(events_ids[0], callback.from_user.id), urllib.parse.quote_plus(city))
+
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_EVENT_NAV_PREV))
+async def event_nav_prev(callback: CallbackQuery, state: FSMContext):
+    # data format: event:nav:prev:{current_index}:{city_key}
+    try:
+        rest = callback.data.split(CB_EVENT_NAV_PREV, 1)[1]
+        idx_str, city_key = rest.split(":", 1)
+        current_index = int(idx_str)
+    except Exception:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    events_ids = data.get('events_ids') or []
+    if not events_ids:
+        await callback.answer("Сессия поиска устарела.", show_alert=True)
+        return
+
+    new_index = max(0, current_index - 1)
+    event_id = events_ids[new_index]
+    event = await db.get_event_full_details(event_id)
+    text = render_premium_card_text(event)
+    kb = get_premium_event_kb(event_id, new_index, len(events_ids), callback.from_user.id, await db.is_user_confirmed(event_id, callback.from_user.id), city_key)
+
+    await state.update_data(current_index=new_index)
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_EVENT_NAV_NEXT))
+async def event_nav_next(callback: CallbackQuery, state: FSMContext):
+    try:
+        rest = callback.data.split(CB_EVENT_NAV_NEXT, 1)[1]
+        idx_str, city_key = rest.split(":", 1)
+        current_index = int(idx_str)
+    except Exception:
+        await callback.answer()
+        return
+
+    data = await state.get_data()
+    events_ids = data.get('events_ids') or []
+    if not events_ids:
+        await callback.answer("Сессия поиска устарела.", show_alert=True)
+        return
+
+    new_index = min(len(events_ids) - 1, current_index + 1)
+    event_id = events_ids[new_index]
+    event = await db.get_event_full_details(event_id)
+    text = render_premium_card_text(event)
+    kb = get_premium_event_kb(event_id, new_index, len(events_ids), callback.from_user.id, await db.is_user_confirmed(event_id, callback.from_user.id), city_key)
+
+    await state.update_data(current_index=new_index)
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_EVENT_SHOW))
+async def event_show_details(callback: CallbackQuery, state: FSMContext):
+    try:
+        event_id = int(callback.data.split(CB_EVENT_SHOW, 1)[1])
+    except Exception:
+        await callback.answer()
+        return
+
+    # Покажем детали события через уже существующий handler: используем edit_text с get_event_details_kb
+    event = await db.get_event_details(event_id)
+    if not event:
+        await callback.answer(ERROR_EVENT_NOT_FOUND)
+        return
+
+    (event_type, custom_type, city, date, time, max_participants, 
+     description, contact, status, creator_id, creator_username, 
+     creator_name, confirmed_count) = event
+
+    display_type = custom_type or event_type
+    is_confirmed = await db.is_user_confirmed(event_id, callback.from_user.id)
+
+    text = EVENT_DETAILS.format(
+        event_type=display_type,
+        city=city,
+        date=date,
+        time=time,
+        creator=creator_name or '@' + creator_username,
+        contact=contact,
+        confirmed_count=confirmed_count,
+        max_participants=max_participants,
+        status=status,
+        description=description,
+        user_status=EVENT_ALREADY_CONFIRMED if is_confirmed else EVENT_JOIN_PROMPT
     )
+
+    await state.set_state(MainStates.VIEWING_EVENT)
+    await state.update_data(current_event_id=event_id)
+    await callback.message.edit_text(text, reply_markup=get_event_details_kb(event_id, callback.from_user.id, is_confirmed))
+    await callback.answer()
+
+
+def render_premium_card_text(event_full):
+    """Форматирование текста премиум-карточки из get_event_full_details row."""
+    if not event_full:
+        return "Событие не найдено."
+
+    # event_full columns per db.get_event_full_details
+    (eid, etype, custom_type, city, date, time, max_participants, description, contact, status, created_at, creator_telegram_id, creator_name, creator_username, confirmed_count, total_participants) = event_full
+
+    display_type = custom_type or etype
+
+    # human-readable date
+    try:
+        event_date = datetime.strptime(date, "%d.%m.%Y").date()
+        today = datetime.now().date()
+        if event_date == today:
+            date_str = f"Сегодня в {time}"
+        else:
+            # простой формат: DD MMMM • HH:MM
+            months = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"]
+            day = int(date.split('.')[0])
+            month = months[int(date.split('.')[1]) - 1]
+            date_str = f"{day} {month} • {time}"
+    except Exception:
+        date_str = f"{date} {time}"
+
+    confirmed = confirmed_count or 0
+    max_p = max_participants or 0
+
+    badge = ""
+    try:
+        fill_ratio = (confirmed / max_p) if max_p > 0 else 0
+        if fill_ratio >= 0.9 and confirmed >= 5:
+            badge = " 🔥 Популярно"
+        elif fill_ratio >= 0.75:
+            badge = " ⏳ Почти фулл"
+    except Exception:
+        badge = ""
+
+    short_desc = (description or "").strip().split('\n')[:4]
+    short_desc = '\n'.join(short_desc)
+
+    creator = creator_name or (('@' + creator_username) if creator_username else 'не указан')
+
+    parts = [f"🎉 {display_type}{badge}", f"🏙 {city}", f"📅 {date_str}", f"👥 {confirmed} из {max_p}", "", short_desc]
+    if contact:
+        parts.append(f"📞 Контакт: {contact}")
+
+    return "\n".join(parts)
 
 @router.callback_query(F.data.startswith(CB_EVENT_VIEW))
 async def view_event_details(callback: CallbackQuery, state: FSMContext):
