@@ -410,7 +410,7 @@ async def start_create_event(message: Message, state: FSMContext):
     name, city, onboarded = await db.get_user_profile(message.from_user.id)
     
     if not onboarded:
-        await message.answer("❌ Сначала завершите онбординг. Нажмите /start")
+        await message.answer("Пожалуйста, сначала пройди онбординг — нажми /start, и всё будет готово.")
         return
     
     await state.update_data(city=city)
@@ -438,7 +438,7 @@ async def process_event_type(message: Message, state: FSMContext):
     
     if message.text not in ["🎉 Туса", "🎳 Страйкбол", "🔫 Пейнтбол", "🎯 Другое"]:
         await message.answer(
-            "❌ Пожалуйста, выберите тип из предложенных вариантов:",
+            "Пожалуйста, выбери тип из списка — нажми одну из кнопок:",
             reply_markup=get_event_types_kb()
         )
         return
@@ -471,14 +471,14 @@ async def process_event_type_other(message: Message, state: FSMContext):
         
         if len(custom_type) < 3:
             await message.answer(
-                "❌ Название слишком короткое!\n\nМинимум 3 символа. Примеры:\n• Танцы\n• Волейбол\n• Пикник\n\nВведите снова:",
+                "Название получилось коротким — напиши, пожалуйста, чуть длиннее (минимум 3 символа).\nПримеры: Танцы, Волейбол, Пикник.\n\nПопробуй ещё раз:",
                 reply_markup=get_back_cancel_kb()
             )
             return
         
         if len(custom_type) > 50:
             await message.answer(
-                "❌ Название слишком длинное!\n\nМаксимум 50 символов. Введите короче.",
+                "Название слишком длинное — попробуй короче (до 50 символов).",
                 reply_markup=get_back_cancel_kb()
             )
             return
@@ -493,7 +493,7 @@ async def process_event_type_other(message: Message, state: FSMContext):
     except Exception as e:
         logging.error(f"Error in process_event_type_other: {e}")
         await message.answer(
-            "❌ Ошибка при обработке. Попробуйте снова.",
+            "Упс — что-то пошло не так. Попробуй ещё раз, пожалуйста.",
             reply_markup=get_back_cancel_kb()
         )
 
@@ -563,7 +563,7 @@ async def process_event_time(message: Message, state: FSMContext):
     except Exception as e:
         logging.error(f"Error in process_event_time: {e}")
         await message.answer(
-            "❌ Ошибка при обработке. Попробуйте снова.",
+            "Упс — что-то пошло не так. Попробуй ещё раз, пожалуйста.",
             reply_markup=get_back_cancel_kb()
         )
 
@@ -580,19 +580,19 @@ async def process_max_participants(message: Message, state: FSMContext):
         max_participants = int(message.text)
         if max_participants < 2:
             await message.answer(
-                "❌ Минимум 2 участника!\n\nВведите число больше или равное 2. Например: 10",
+                "Нужно минимум 2 участника — введи число не меньше 2, например: 10",
                 reply_markup=get_back_cancel_kb()
             )
             return
         if max_participants > 1000:
             await message.answer(
-                "❌ Слишком много!\n\nМаксимум 1000 участников. Введите меньше.",
+                "Слишком большой лимит — максимум 1000 участников. Введи меньше, пожалуйста.",
                 reply_markup=get_back_cancel_kb()
             )
             return
     except ValueError:
         await message.answer(
-            "❌ Это не число!\n\nВведите просто цифры, например: 10",
+            "Похоже, это не число — введи, пожалуйста, цифрами, например: 10",
             reply_markup=get_back_cancel_kb()
         )
         return
@@ -625,7 +625,7 @@ async def process_description(message: Message, state: FSMContext):
     
     if len(description) > 500:
         await message.answer(
-            "❌ Описание слишком длинное!\n\nМаксимум 500 символов. Сократите текст.",
+            "Описание слишком длинное — сократи, пожалуйста, до 500 символов.",
             reply_markup=get_back_cancel_kb()
         )
         return
@@ -659,7 +659,7 @@ async def process_contact(message: Message, state: FSMContext):
         
         if len(contact) > 100:
             await message.answer(
-                "❌ Контакт слишком длинный!\n\nМаксимум 100 символов. Введите короче.",
+                "Контакт получился слишком длинным — сократи до 100 символов, пожалуйста.",
                 reply_markup=get_back_cancel_kb()
             )
             return
@@ -684,7 +684,7 @@ async def process_contact(message: Message, state: FSMContext):
     except Exception as e:
         logging.error(f"Error in process_contact: {e}")
         await message.answer(
-            "❌ Ошибка при обработке. Попробуйте снова.",
+            "Упс — что-то пошло не так. Попробуй ещё раз, пожалуйста.",
             reply_markup=get_back_cancel_kb()
         )
         return
@@ -706,7 +706,7 @@ async def process_confirmation(message: Message, state: FSMContext):
             
             if not event_id:
                 await message.answer(
-                    "❌ Ошибка при создании события\n\nПопробуйте снова позже.",
+                    "Не получилось создать событие — попробуй позже, пожалуйста.",
                     reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
                 )
                 await state.clear()
@@ -738,7 +738,7 @@ async def process_confirmation(message: Message, state: FSMContext):
         except Exception as e:
             logging.error(f"Error creating event: {e}", exc_info=True)
             await message.answer(
-                "❌ Произошла ошибка при создании события\n\nПопробуйте снова позже или напишите в поддержку.",
+                "Не удалось создать событие. Попробуй позже или напиши в поддержку.",
                 reply_markup=get_main_menu_kb(message.from_user.id, ADMIN_IDS)
             )
             await state.clear()
@@ -749,7 +749,7 @@ async def process_confirmation(message: Message, state: FSMContext):
         await send_create_intro(message, state)
     else:
         await message.answer(
-            "❌ Пожалуйста, выберите вариант:",
+            "Выбери, пожалуйста, вариант:",
             reply_markup=get_confirm_kb()
         )
 
@@ -758,7 +758,7 @@ async def start_search(message: Message, state: FSMContext):
     name, city, onboarded = await db.get_user_profile(message.from_user.id)
     
     if not onboarded:
-        await message.answer("❌ Сначала завершите онбординг. Нажмите /start")
+        await message.answer("Пожалуйста, сначала пройди онбординг — нажми /start, и всё будет готово.")
         return
     
     events = await db.get_events_by_city(city)
@@ -866,7 +866,7 @@ async def back_from_payment(callback: CallbackQuery, state: FSMContext):
         try:
             event_id = int(callback.data.split(CB_EVENT_BACK, 1)[1])
         except Exception:
-            await callback.answer("❌ Ошибка при возврате")
+            await callback.answer("Не получилось вернуться — попробуй ещё раз.")
             return
     
     event = await db.get_event_details(event_id)
@@ -1349,7 +1349,7 @@ async def show_user_info(callback: CallbackQuery):
     try:
         telegram_id = int(callback.data.split(CB_USER_INFO, 1)[1])
     except Exception:
-        await callback.answer("❌ Неверный идентификатор пользователя")
+        await callback.answer("Неверный идентификатор пользователя.")
         return
 
     info = await db.get_user_full_info(telegram_id)
@@ -1389,7 +1389,7 @@ async def back_to_profile(callback: CallbackQuery, state: FSMContext):
     user_info = await db.get_user_full_info(callback.from_user.id)
     
     if not user_info:
-        await callback.answer("❌ Профиль не найдена")
+        await callback.answer("Профиль не найдена.")
         return
     
     name, city, username, rating, created_at, events_created, bookings_made = user_info

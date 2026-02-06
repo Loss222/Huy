@@ -290,7 +290,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
         try:
             event_id = int(callback.data.split("admin:complete_event:", 1)[1])
         except Exception:
-            await callback.answer("❌ Неверный ID события")
+            await callback.answer("Неверный ID события.")
             return
 
         # Обновляем статус события на COMPLETED
@@ -300,7 +300,7 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
                 await conn.commit()
         except Exception as e:
             logging.error(f"Failed to mark event {event_id} completed: {e}")
-            await callback.answer("❌ Ошибка при пометке события")
+            await callback.answer("Не удалось пометить событие — попробуйте ещё раз.")
             return
 
         # Вызываем начисление инициатору
