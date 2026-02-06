@@ -81,8 +81,8 @@ def register_admin(db, bot: Bot, admin_ids: List[int], platform_fee: int = 99):
             event_id, event_type, city, date_time, creator_name, creator_username, status, participants_count, max_participants = event
             status_emoji = "✅" if status == "ACTIVE" else "❌"
             creator_display = f"@{creator_username}" if creator_username else creator_name or "Неизвестен"
-            
-            text = f"{status_emoji} {event_type[:15]} | {city} | {participants_count}/{max_participants}"
+            # Две строки: заголовок и дополнительная информация
+            text = f"{status_emoji} {event_type[:20]}\n{city} • {participants_count}/{max_participants}"
             
             buttons.append([
                 InlineKeyboardButton(

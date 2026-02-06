@@ -44,8 +44,35 @@ CB_NAV_BACK_TO_SEARCH = "nav:back_to_search"
 CB_NAV_BACK_TO_MY_BOOKINGS = "nav:back_to_my_bookings"
 CB_USER_INFO = "user:info:"
 CB_BACK_TO_EVENTS = "event:back_to_list"
-CB_CREATE_FORMAT = "create:format:"
-CB_CREATE_TYPE = "create:type:"
+CB_CREATE_FORMAT = "cat:"
+CB_CREATE_TYPE = "type:"
+
+# Mapping of type slugs to display names per format
+TYPE_MAPPING = {
+    'active': [
+        ('paintball','Пейнтбол'), ('strikeball','Страйкбол'), ('lasertag','Лазертаг'), ('football','Футбол'), ('basketball','Баскетбол'),
+        ('volleyball','Волейбол'), ('bowling','Боулинг'), ('karting','Картинг'), ('quest_offline','Квест (офлайн)'), ('other_active','Другое активное')
+    ],
+    'party': [
+        ('party','Вечеринка'), ('birthday','День рождения'), ('bar','Бар'), ('club','Клуб'), ('karaoke','Караоке'), ('concert','Концерт / лайв'),
+        ('festival','Фестиваль'), ('thematic_party','Тематическая тусовка'), ('meetup','Meetup / встреча'), ('other_party','Другое событие')
+    ],
+    'esport': [
+        ('pubg_mobile','PUBG Mobile'), ('mobile_legends','Mobile Legends'), ('cs2_valorant','CS2 / Valorant'), ('dota2','Dota 2'), ('fifa','FIFA / EA FC'),
+        ('fortnite','Fortnite'), ('warzone','Warzone'), ('other_tournament','Другое (турнир)')
+    ],
+    'other': [
+        ('lecture','Лекция'), ('masterclass','Мастер-класс'), ('presentation','Презентация'), ('trip','Совместная поездка'), ('walk','Прогулка'), ('networking','Нетворкинг'), ('other','Другое')
+    ]
+}
+
+def get_type_display(slug: str):
+    """Возвращает кортеж (format_key, display_name) для данного slug, или (None, slug) если не найдено."""
+    for fmt, items in TYPE_MAPPING.items():
+        for s, disp in items:
+            if s == slug:
+                return fmt, disp
+    return None, slug
 
 # === ОБЩИЕ КЛАВИАТУРЫ ===
 def get_main_menu_kb(telegram_id, admin_ids):
@@ -88,7 +115,8 @@ def get_cities_keyboard(page=0, items_per_page=8):
     buttons = []
     row = []
     for i, city in enumerate(cities_slice):
-        row.append(InlineKeyboardButton(text=city, callback_data=f"{CB_CITY_SELECT}{city}"))
+        idx = start_idx + i
+        row.append(InlineKeyboardButton(text=city, callback_data=f"{CB_CITY_SELECT}{idx}"))
         if i % 2 == 1:
             buttons.append(row)
             row = []
@@ -125,9 +153,9 @@ def get_event_types_kb():
 def get_create_format_kb():
     """Inline keyboard выбора формата (категории) события"""
     buttons = [
-        [InlineKeyboardButton(text="🏃‍♂️ Активные игры", callback_data=f"{CB_CREATE_FORMAT}active_games")],
-        [InlineKeyboardButton(text="🎉 Вечеринки и тусовки", callback_data=f"{CB_CREATE_FORMAT}parties")],
-        [InlineKeyboardButton(text="🎮 Киберспорт и турниры", callback_data=f"{CB_CREATE_FORMAT}esports")],
+        [InlineKeyboardButton(text="🏃‍♂️ Активные игры", callback_data=f"{CB_CREATE_FORMAT}active")],
+        [InlineKeyboardButton(text="🎉 Вечеринки и тусовки", callback_data=f"{CB_CREATE_FORMAT}party")],
+        [InlineKeyboardButton(text="🎮 Киберспорт и турниры", callback_data=f"{CB_CREATE_FORMAT}esport")],
         [InlineKeyboardButton(text="📚 Другое", callback_data=f"{CB_CREATE_FORMAT}other")],
         [InlineKeyboardButton(text=BTN_BACK, callback_data=CB_NAV_BACK_TO_MAIN)]
     ]
@@ -136,29 +164,15 @@ def get_create_format_kb():
 
 def get_types_kb_for_format(format_key: str):
     """Возвращает inline-клавиатуру типов для заданной категории format_key."""
-    mapping = {
-        'active_games': [
-            "Пейнтбол", "Страйкбол", "Лазертаг", "Футбол", "Баскетбол",
-            "Волейбол", "Боулинг", "Картинг", "Квест (офлайн)", "Другое активное"
-        ],
-        'parties': [
-            "Вечеринка", "День рождения", "Бар", "Клуб", "Караоке", "Концерт / лайв",
-            "Фестиваль", "Тематическая тусовка", "Meetup / встреча", "Другое событие"
-        ],
-        'esports': [
-            "PUBG Mobile", "Mobile Legends", "CS2 / Valorant", "Dota 2", "FIFA / EA FC",
-            "Fortnite", "Warzone", "Другое (турнир)"
-        ],
-        'other': [
-            "Лекция", "Мастер-класс", "Презентация", "Совместная поездка", "Прогулка", "Нетворкинг", "Другое"
-        ]
-    }
-
-    types = mapping.get(format_key, [])
+    types = TYPE_MAPPING.get(format_key, [])
     rows = []
-    import urllib.parse
-    for t in types:
-        rows.append([InlineKeyboardButton(text=t, callback_data=f"{CB_CREATE_TYPE}{format_key}:{urllib.parse.quote_plus(t)}")])
+    seen = set()
+    for slug, disp in types:
+        cb = f"{CB_CREATE_TYPE}{slug}"
+        if cb in seen:
+            continue
+        seen.add(cb)
+        rows.append([InlineKeyboardButton(text=disp, callback_data=cb)])
 
     # Кнопка назад к выбору формата
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{CB_CREATE_FORMAT}BACK")])
@@ -182,10 +196,11 @@ def get_event_list_kb(events):
     buttons = []
     for event in events:
         event_id, event_type, max_participants, date_time, confirmed_count = event
-        
+        # Показать имя события на первой строке, а город/статус на второй строке
+        text = f"{event_type[:20]}\n{confirmed_count}/{max_participants} • {date_time}"
         buttons.append([
             InlineKeyboardButton(
-                text=f"{event_type[:20]} • {confirmed_count}/{max_participants} • {date_time}",
+                text=text,
                 callback_data=f"{CB_EVENT_VIEW}{event_id}"
             )
         ])
@@ -277,7 +292,8 @@ def get_my_events_kb(events):
     for event in events:
         event_id, event_type, city, date_time, status, participants_count, max_participants = event
         status_emoji = "✅" if status == 'ACTIVE' else "❌"
-        text = f"{status_emoji} {event_type[:15]} • {city} • {participants_count}/{max_participants}"
+        # Две строки: заголовок и вспомогательная информация
+        text = f"{status_emoji} {event_type[:20]}\n{city} • {participants_count}/{max_participants}"
 
         # Основная кнопка — переход к деталям события (существующий callback не меняем)
         row = [
@@ -311,7 +327,7 @@ def get_my_bookings_kb(bookings):
         booking_dt = datetime.fromisoformat(booking_date.replace(' ', 'T'))
         formatted_date = booking_dt.strftime("%d.%m.%Y")
         
-        text = f"✅ {event_type[:15]} • {city} • {date_time[:10]}"
+        text = f"✅ {event_type[:20]}\n{city} • {date_time[:10]}"
         
         buttons.append([
             InlineKeyboardButton(

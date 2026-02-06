@@ -12,6 +12,7 @@ from aiogram.types import ReplyKeyboardRemove
 
 from texts import *
 from keyboards import get_cities_keyboard, get_main_menu_kb
+from cities import CITIES
 from database import Database
 from states import OnboardingStates, MainStates
 CB_CITY_SELECT = "city:select:"
@@ -66,7 +67,9 @@ def register_onboarding(db: Database, admin_ids: list):
     async def process_city_selection(callback: CallbackQuery, state: FSMContext):
         logging.info(f"process_city_selection called: data={callback.data}, from={callback.from_user.id}")
         try:
-            city = callback.data.split(CB_CITY_SELECT, 1)[1]
+            idx_str = callback.data.split(CB_CITY_SELECT, 1)[1]
+            city_idx = int(idx_str)
+            city = CITIES[city_idx]
         except Exception:
             await callback.answer()
             return

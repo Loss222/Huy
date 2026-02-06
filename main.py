@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup, default_state
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
-import urllib.parse
+from cities import CITIES
 # Temporary update-logger middleware removed due to aiogram version incompatibility.
 # We'll use lightweight non-intrusive logging handlers further below if needed.
 
@@ -515,9 +515,9 @@ async def create_format_choice(callback: CallbackQuery, state: FSMContext):
 
     format_key = payload
     display_map = {
-        'active_games': 'Активные игры',
-        'parties': 'Вечеринки и тусовки',
-        'esports': 'Киберспорт и турниры',
+        'active': 'Активные игры',
+        'party': 'Вечеринки и тусовки',
+        'esport': 'Киберспорт и турниры',
         'other': 'Другое'
     }
     display = display_map.get(format_key, format_key)
@@ -532,30 +532,37 @@ async def create_format_choice(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith(CB_CREATE_TYPE))
 async def create_type_choice(callback: CallbackQuery, state: FSMContext):
     try:
-        rest = callback.data.split(CB_CREATE_TYPE, 1)[1]
-        format_key, t_enc = rest.split(':', 1)
-        import urllib.parse
-        type_text = urllib.parse.unquote_plus(t_enc)
+        slug = callback.data.split(CB_CREATE_TYPE, 1)[1]
     except Exception:
         await callback.answer()
         return
 
-    # Получаем формат display
+    from keyboards import get_type_display
+    fmt_key, type_text = get_type_display(slug)
+
     data = await state.get_data()
     format_display = data.get('format') or ''
 
-    # Если пользователь выбрал "Другое" — переводим в текстовый ввод для типа
-    if 'Другое' in type_text or type_text.lower().startswith('другое'):
+    # Если выбран slug 'other' или display содержит 'Другое' — переводим в текстовый ввод
+    if type_text and ('Другое' in type_text or type_text.lower().startswith('другое') or slug.startswith('other')):
         await state.update_data(type=None)
         await state.set_state(CreateEventStates.TYPE_OTHER)
-        await callback.message.edit_text("Напиши, пожалуйста, какой тип события (коротко):", reply_markup=get_back_cancel_kb())
+        try:
+            await callback.message.edit_text("Напиши, пожалуйста, какой тип события (коротко):")
+        except Exception:
+            pass
+        await callback.message.answer("Напиши, пожалуйста, какой тип события (коротко):", reply_markup=get_back_cancel_kb())
         await callback.answer()
         return
 
-    # Иначе — сохраняем тип и продолжаем стандартный сценарий (дата)
+    # Сохраняем тип и продолжаем стандартный сценарий
     await state.update_data(type=type_text, custom_type=None, format=format_display)
     await state.set_state(CreateEventStates.DATE)
-    await callback.message.edit_text(CREATE_EVENT_DATE.format(event_type=type_text), reply_markup=get_back_cancel_kb())
+    try:
+        await callback.message.edit_text(CREATE_EVENT_DATE.format(event_type=type_text))
+    except Exception:
+        pass
+    await callback.message.answer(CREATE_EVENT_DATE.format(event_type=type_text), reply_markup=get_back_cancel_kb())
     await callback.answer()
 
 
@@ -857,15 +864,19 @@ async def search_use_my_city(callback: CallbackQuery, state: FSMContext):
         await state.set_state(MainStates.MAIN_MENU)
         return
 
-    # Сохраняем список id в FSM
+    # Сохраняем список id в FSM и индекс города
     events_ids = [e[0] for e in events_sorted]
-    await state.update_data(events_ids=events_ids, current_index=0, search_city=city)
+    try:
+        city_idx = CITIES.index(city)
+    except Exception:
+        city_idx = 0
+    await state.update_data(events_ids=events_ids, current_index=0, search_city_index=city_idx)
     await state.set_state(SearchEventsStates.SELECT_EVENT)
 
     # Показать премиум-карточку первого события
     first_event = await db.get_event_full_details(events_ids[0])
     text = render_premium_card_text(first_event)
-    kb = get_premium_event_kb(events_ids[0], 0, len(events_ids), callback.from_user.id, await db.is_user_confirmed(events_ids[0], callback.from_user.id), urllib.parse.quote_plus(city))
+    kb = get_premium_event_kb(events_ids[0], 0, len(events_ids), callback.from_user.id, await db.is_user_confirmed(events_ids[0], callback.from_user.id), str(city_idx))
 
     await callback.message.edit_text(text, reply_markup=kb)
     await callback.answer()
@@ -882,23 +893,23 @@ async def search_choose_city(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data == CB_ONBOARDING_CANCEL)
+@router.callback_query(F.data == CB_ONBOARDING_CANCEL, StateFilter(SearchEventsStates.CHOOSE_CITY))
 async def search_cancel_city(callback: CallbackQuery, state: FSMContext):
     """Обработка нажатия 'Отмена' в экранe выбора города при поиске — возврат в главное меню."""
     current_state = await state.get_state()
-    if current_state == SearchEventsStates.CHOOSE_CITY.state:
-        await state.clear()
-        await state.set_state(MainStates.MAIN_MENU)
-        try:
-            await callback.message.edit_text(BACK_TO_MAIN)
-        except Exception:
-            pass
-        await callback.message.answer(
-            "Выберите действие:",
-            reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS)
-        )
-        await callback.answer()
-        return
+    # Только обрабатываем отмену, если мы в режиме выбора города для поиска событий
+    await state.clear()
+    await state.set_state(MainStates.MAIN_MENU)
+    try:
+        await callback.message.edit_text(BACK_TO_MAIN)
+    except Exception:
+        pass
+    await callback.message.answer(
+        "Выберите действие:",
+        reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS)
+    )
+    await callback.answer()
+    return
 
 
 @router.callback_query(F.data.startswith(CB_CITY_PAGE))
@@ -916,7 +927,10 @@ async def search_city_page(callback: CallbackQuery, state: FSMContext):
 async def search_set_city(callback: CallbackQuery, state: FSMContext):
     # Выбрали конкретный город в режиме поиска — не записываем в профиль
     try:
-        city = callback.data.split(CB_CITY_SELECT, 1)[1]
+        idx_str = callback.data.split(CB_CITY_SELECT, 1)[1]
+        city_idx = int(idx_str)
+        from cities import CITIES as ALL_CITIES
+        city = ALL_CITIES[city_idx]
     except Exception:
         await callback.answer()
         return
@@ -930,12 +944,16 @@ async def search_set_city(callback: CallbackQuery, state: FSMContext):
         return
 
     events_ids = [e[0] for e in events_sorted]
-    await state.update_data(events_ids=events_ids, current_index=0, search_city=city)
+    try:
+        city_idx = CITIES.index(city)
+    except Exception:
+        city_idx = 0
+    await state.update_data(events_ids=events_ids, current_index=0, search_city_index=city_idx)
     await state.set_state(SearchEventsStates.SELECT_EVENT)
 
     first_event = await db.get_event_full_details(events_ids[0])
     text = render_premium_card_text(first_event)
-    kb = get_premium_event_kb(events_ids[0], 0, len(events_ids), callback.from_user.id, await db.is_user_confirmed(events_ids[0], callback.from_user.id), urllib.parse.quote_plus(city))
+    kb = get_premium_event_kb(events_ids[0], 0, len(events_ids), callback.from_user.id, await db.is_user_confirmed(events_ids[0], callback.from_user.id), str(city_idx))
 
     await callback.message.edit_text(text, reply_markup=kb)
     await callback.answer()
@@ -1110,9 +1128,9 @@ async def view_event_details(callback: CallbackQuery, state: FSMContext):
     # Сохраняем контекст возврата в FSM, если он есть (premium flow)
     data = await state.get_data()
     if data.get('events_ids'):
-        # Если пользователь пришёл из премиум-потока — сохраняем контекст
+        # Если пользователь пришёл из премиум-потока — сохраняем контекст (используем индекс города)
         await state.update_data(return_context={
-            'city': data.get('search_city'),
+            'city_index': data.get('search_city_index'),
             'current_index': data.get('current_index', 0),
             'sort': 'confirmed_desc',
             'source': 'premium_events_list'
@@ -1151,9 +1169,13 @@ async def back_to_events_list(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     ctx = data.get('return_context')
 
-    if ctx and ctx.get('source') == 'premium_events_list' and ctx.get('city'):
-        city = ctx.get('city')
+    if ctx and ctx.get('source') == 'premium_events_list' and ctx.get('city_index') is not None:
+        city_idx = int(ctx.get('city_index'))
         current_index = int(ctx.get('current_index', 0))
+        try:
+            city = CITIES[city_idx]
+        except Exception:
+            city = CITIES[0]
 
         events = await db.get_events_by_city(city)
         events_sorted = sorted(events, key=lambda e: e[4] or 0, reverse=True)
@@ -1169,13 +1191,13 @@ async def back_to_events_list(callback: CallbackQuery, state: FSMContext):
         if current_index < 0 or current_index >= len(events_ids):
             current_index = 0
 
-        await state.update_data(events_ids=events_ids, current_index=current_index, search_city=city)
+        await state.update_data(events_ids=events_ids, current_index=current_index, search_city_index=city_idx)
         await state.set_state(SearchEventsStates.SELECT_EVENT)
 
         event_id = events_ids[current_index]
         event_full = await db.get_event_full_details(event_id)
         text = render_premium_card_text(event_full)
-        kb = get_premium_event_kb(event_id, current_index, len(events_ids), callback.from_user.id, await db.is_user_confirmed(event_id, callback.from_user.id), urllib.parse.quote_plus(city))
+        kb = get_premium_event_kb(event_id, current_index, len(events_ids), callback.from_user.id, await db.is_user_confirmed(event_id, callback.from_user.id), str(city_idx))
 
         await callback.message.edit_text(text, reply_markup=kb)
         await callback.answer()
