@@ -458,7 +458,7 @@ async def cmd_create_tournament(message: Message, state: FSMContext):
 
     await state.update_data(city=city)
     await state.set_state(TournamentStates.STEP_TYPE)
-    await message.answer("Выберите тип турнира:", reply_markup=get_tournament_types_kb())
+    await message.answer(TOURNAMENT_CREATE_START, reply_markup=get_tournament_types_kb())
 
 
 @router.callback_query(F.data.startswith(CB_TOURN_TYPE))
@@ -472,9 +472,9 @@ async def tournament_type_choice(callback: CallbackQuery, state: FSMContext):
     await state.update_data(tournament_type_slug=slug, tournament_type_display=display)
     await state.set_state(TournamentStates.STEP_MODE)
     try:
-        await callback.message.edit_text(f"Тип: {display}\nВыберите режим:", reply_markup=get_tournament_mode_kb())
+        await callback.message.edit_text(f"Тип: {display}\n{TOURNAMENT_CHOOSE_MODE}", reply_markup=get_tournament_mode_kb())
     except Exception:
-        await callback.message.answer(f"Тип: {display}\nВыберите режим:", reply_markup=get_tournament_mode_kb())
+        await callback.message.answer(f"Тип: {display}\n{TOURNAMENT_CHOOSE_MODE}", reply_markup=get_tournament_mode_kb())
     await callback.answer()
 
 
@@ -484,9 +484,9 @@ async def tournament_mode_choice(callback: CallbackQuery, state: FSMContext):
     await state.update_data(mode=mode)
     await state.set_state(TournamentStates.STEP_REG_LINK)
     try:
-        await callback.message.edit_text("Отправь ссылку на регистрацию / канал (или напиши 'нет'):")
+        await callback.message.edit_text(TOURNAMENT_REG_LINK_PROMPT)
     except Exception:
-        await callback.message.answer("Отправь ссылку на регистрацию / канал (или напиши 'нет'):")
+        await callback.message.answer(TOURNAMENT_REG_LINK_PROMPT)
     await callback.answer()
 
 
@@ -495,7 +495,7 @@ async def tournament_reg_link(message: Message, state: FSMContext):
     text = message.text.strip()
     await state.update_data(reg_link=text)
     await state.set_state(TournamentStates.STEP_DATE)
-    await message.answer("Укажи дату и время турнира в формате ДД.MM.ГГГГ ЧЧ:ММ (например: 25.12.2026 19:00):")
+    await message.answer(TOURNAMENT_DATETIME_PROMPT)
 
 
 @router.message(StateFilter(TournamentStates.STEP_DATE))
@@ -503,13 +503,13 @@ async def tournament_date(message: Message, state: FSMContext):
     text = message.text.strip()
     # Simple validation: check space separator
     if ' ' not in text:
-        await message.answer("Формат неверный. Используй: ДД.MM.ГГГГ ЧЧ:ММ")
+        await message.answer(TOURNAMENT_DATETIME_INVALID)
         return
     date_part, time_part = text.split(' ', 1)
     # Could add more validation, keep simple
     await state.update_data(date=date_part, time=time_part)
     await state.set_state(TournamentStates.STEP_MAX_PARTICIPANTS)
-    await message.answer("Укажи лимит участников / команд (число):")
+    await message.answer(TOURNAMENT_MAX_PROMPT)
 
 
 @router.message(StateFilter(TournamentStates.STEP_MAX_PARTICIPANTS))
@@ -517,21 +517,21 @@ async def tournament_max_participants(message: Message, state: FSMContext):
     try:
         num = int(message.text.strip())
         if num < 2:
-            await message.answer("Минимум 2. Введи число >=2")
+            await message.answer(TOURNAMENT_MAX_INVALID)
             return
     except ValueError:
-        await message.answer("Пожалуйста, введи число")
+        await message.answer(TOURNAMENT_MAX_INVALID)
         return
     await state.update_data(max_participants=num)
     await state.set_state(TournamentStates.STEP_DESCRIPTION)
-    await message.answer("Коротко опиши турнир (1-2 строки):")
+    await message.answer(TOURNAMENT_DESC_PROMPT)
 
 
 @router.message(StateFilter(TournamentStates.STEP_DESCRIPTION))
 async def tournament_description(message: Message, state: FSMContext):
     desc = message.text.strip()
     if len(desc) < 5:
-        await message.answer("Описание слишком короткое — минимум 5 символов")
+        await message.answer(TOURNAMENT_DESC_TOO_SHORT)
         return
     await state.update_data(description=desc)
     await state.set_state(TournamentStates.STEP_CONFIRM)
@@ -545,10 +545,10 @@ async def tournament_description(message: Message, state: FSMContext):
         f"Описание: {data.get('description')}"
     )
     try:
-        await message.answer("Проверь данные:", reply_markup=get_tournament_confirm_kb())
+        await message.answer(TOURNAMENT_REVIEW_PROMPT, reply_markup=get_tournament_confirm_kb())
         await message.answer(summary)
     except Exception:
-        await message.answer("Проверь данные:")
+        await message.answer(TOURNAMENT_REVIEW_PROMPT)
         await message.answer(summary)
 
 
@@ -575,8 +575,11 @@ async def tournament_confirm(callback: CallbackQuery, state: FSMContext):
 
     await state.clear()
     await state.set_state(MainStates.MAIN_MENU)
-    await callback.message.edit_text("Турнир создан!")
-    await callback.message.answer(f"Турнир создан (ID: {event_id}).", reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS))
+    try:
+        await callback.message.edit_text(TOURNAMENT_CREATED.format(event_id=event_id))
+    except Exception:
+        await callback.message.answer(TOURNAMENT_CREATED.format(event_id=event_id))
+    await callback.message.answer("Возврат в меню.", reply_markup=get_main_menu_kb(callback.from_user.id, ADMIN_IDS))
     await callback.answer()
 
 
@@ -588,37 +591,37 @@ async def tournament_nav_back(callback: CallbackQuery, state: FSMContext):
         # go back to type
         await state.set_state(TournamentStates.STEP_TYPE)
         try:
-            await callback.message.edit_text("Выберите тип турнира:", reply_markup=get_tournament_types_kb())
+            await callback.message.edit_text(TOURNAMENT_CREATE_START, reply_markup=get_tournament_types_kb())
         except Exception:
-            await callback.message.answer("Выберите тип турнира:", reply_markup=get_tournament_types_kb())
+            await callback.message.answer(TOURNAMENT_CREATE_START, reply_markup=get_tournament_types_kb())
         await callback.answer()
         return
     if TournamentStates.STEP_REG_LINK.state in current_state:
         await state.set_state(TournamentStates.STEP_MODE)
         try:
-            await callback.message.edit_text("Выберите режим:", reply_markup=get_tournament_mode_kb())
+            await callback.message.edit_text(TOURNAMENT_CHOOSE_MODE, reply_markup=get_tournament_mode_kb())
         except Exception:
-            await callback.message.answer("Выберите режим:", reply_markup=get_tournament_mode_kb())
+            await callback.message.answer(TOURNAMENT_CHOOSE_MODE, reply_markup=get_tournament_mode_kb())
         await callback.answer()
         return
     if TournamentStates.STEP_DATE.state in current_state:
         await state.set_state(TournamentStates.STEP_REG_LINK)
-        await callback.message.edit_text("Отправь ссылку на регистрацию / канал (или напиши 'нет'):")
+        await callback.message.edit_text(TOURNAMENT_REG_LINK_PROMPT)
         await callback.answer()
         return
     if TournamentStates.STEP_MAX_PARTICIPANTS.state in current_state:
         await state.set_state(TournamentStates.STEP_DATE)
-        await callback.message.edit_text("Укажи дату и время турнира в формате ДД.MM.ГГГГ ЧЧ:ММ:")
+        await callback.message.edit_text(TOURNAMENT_DATETIME_PROMPT)
         await callback.answer()
         return
     if TournamentStates.STEP_DESCRIPTION.state in current_state:
         await state.set_state(TournamentStates.STEP_MAX_PARTICIPANTS)
-        await callback.message.edit_text("Укажи лимит участников / команд (число):")
+        await callback.message.edit_text(TOURNAMENT_MAX_PROMPT)
         await callback.answer()
         return
     if TournamentStates.STEP_CONFIRM.state in current_state:
         await state.set_state(TournamentStates.STEP_DESCRIPTION)
-        await callback.message.edit_text("Коротко опиши турнир (1-2 строки):")
+        await callback.message.edit_text(TOURNAMENT_DESC_PROMPT)
         await callback.answer()
         return
     # default: pass
